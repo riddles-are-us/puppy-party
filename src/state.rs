@@ -1,142 +1,119 @@
-use crate::{player::CombatPlayer, settlement::{encode_address, SettleMentInfo, WithdrawInfo}};
-use serde::Serialize;
-use crate::game::{Game, CommitmentInfo, Content};
+use crate::{player::PLAYERLIST};
+use crate::events::EventQueue;
+use std::cell::RefCell;
+use crate::player::{PuppyPlayer};
+use crate::Player;
+use zkwasm_rest_abi::MERKLE_MAP;
+use serde::{Serialize};
+use crate::player::Owner;
 
-const TIMETICK: u32 = 0;
-const GUESS: u32 = 1;
-const WITHDRAW: u32 = 2;
-const DEPOSIT: u32 = 3;
-
-pub struct Transaction {
-    pub command: u32,
-    pub data: [u64; 3],
+#[derive(Serialize)]
+pub struct GlobalState {
+    player_list: PLAYERLIST,
+    progress: u64,
+    counter: u64
 }
 
-const ERROR_PLAYER_NOT_FOUND: u32 = 1;
+impl GlobalState {
+    pub fn initialize() {
+    }
 
-static mut NUMBER_REAL:u64= 123;
+    pub fn get_state(_pid: Vec<u64>) -> String {
+        let player_list = PLAYERLIST::get().unwrap();
+        let progress = QUEUE.0.borrow().progress;
+        let counter = QUEUE.0.borrow().counter;
+        serde_json::to_string(&(player_list, progress, counter)).unwrap()
+    }
+
+    pub fn store() {
+    }
+}
+
+pub struct SafeEventQueue(RefCell<EventQueue>);
+unsafe impl Sync for SafeEventQueue {}
+
+lazy_static::lazy_static! {
+    pub static ref QUEUE: SafeEventQueue = SafeEventQueue (RefCell::new(EventQueue::new()));
+}
+
+const CREATE_PLAYER: u64 = 1;
+const SHAKE_FEET: u64 = 2;
+const JUMP: u64 = 3;
+const SHAKE_HEADS: u64 = 4;
+const POST_COMMENTS: u64 = 5;
+const LOTTERY: u64 = 6;
+
+const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
+const ERROR_PLAYER_NOT_EXIST:u32 = 2;
+
+pub struct Transaction {
+    pub command: u64,
+    pub nonce: u64,
+    pub data: Vec<u64>
+}
 
 impl Transaction {
-    pub fn decode_error(e: u32) -> &'static str{
+    pub fn decode_error(e: u32) -> &'static str {
         match e {
-            ERROR_PLAYER_NOT_FOUND => "PlayerNotFound",
-            _ => "Unknown"
+           ERROR_PLAYER_NOT_EXIST => "PlayerNotExist",
+           ERROR_PLAYER_ALREADY_EXIST => "PlayerAlreadyExist",
+           _ => "Unknown"
         }
     }
 
     pub fn decode(params: [u64; 4]) -> Self {
-        let command = (params[0] & 0xffffffff) as u32;
+        let command = params[0] & 0xff;
+        let nonce = params[0] >> 16;
+        let data = vec![params[1], params[2], params[3]];
         Transaction {
             command,
-            data: [params[1], params[2], params[3]]
+            nonce,
+            data
         }
     }
 
-    pub fn guess(&self, pkey: &[u64; 4]) -> u32 {
-        let pid = CombatPlayer::pkey_to_pid(pkey);
-        let mut player = CombatPlayer::get_from_pid(&pid);
-        zkwasm_rust_sdk::dbg!("====== player {:?} \n", {&pid});
-        let mut player = match player {
+    pub fn create_player(&self, pkey: &[u64; 4]) -> u32 {
+        let player = PuppyPlayer::get(pkey);
+        match player {
+            Some(_) => ERROR_PLAYER_ALREADY_EXIST,
             None => {
-                CombatPlayer::new_from_pid(CombatPlayer::pkey_to_pid(pkey))
-            },
-            Some(player) => {
-                player
-            }
-        };
-
-        if self.data[0] == unsafe {NUMBER_REAL} {
-            player.data.last_result = 0;
-            player.data.balance += 10;
-        } else if self.data[0] < unsafe {NUMBER_REAL} {
-            player.data.last_result = 1;
-        } else if self.data[0] > unsafe {NUMBER_REAL} {
-            player.data.last_result = 2;
-        }
-        player.store();
-        0
-    }
-
-
-    pub fn deposit(&self) -> u32 {
-        let pid = [self.data[0], self.data[1]];
-        let mut player = CombatPlayer::get_from_pid(&pid);
-        let balance = self.data[3];
-        match player.as_mut() {
-            None => {
-                let player = CombatPlayer::new_from_pid(pid);
+                let player = Player::new(&pkey);
                 player.store();
-            },
-            Some(player) => {
-                player.data.balance += balance;
-                player.store();
-            }
-        }
-        0
-    }
-
-    pub fn withdraw(&self, pkey: &[u64; 4]) -> u32 {
-        let mut player = CombatPlayer::get_from_pid(&CombatPlayer::pkey_to_pid(pkey));
-        match player.as_mut() {
-            None => ERROR_PLAYER_NOT_FOUND,
-            Some(player) => {
-                let withdraw = WithdrawInfo::new(
-                    0,
-                    0,
-                    0,
-                    [player.data.balance as u64, 0, 0, 0],
-                    encode_address(&self.data.to_vec()),
-                    );
-                SettleMentInfo::append_settlement(withdraw);
-                player.data.balance = 0;
-                player.store();
+                PLAYERLIST::new().store(pkey);
                 0
             }
         }
     }
 
-    pub fn process(&self, pid: &[u64; 4]) -> u32 {
-        zkwasm_rust_sdk::dbg!("process {}\n", {self.command});
-        if self.command == GUESS {
-            self.guess(pid)
-        } else if self.command == WITHDRAW {
-            self.withdraw(pid)
-        } else if self.command == DEPOSIT {
-            self.deposit()
-        } else {
-            unreachable!()
+    pub fn action(&self, pkey: &[u64; 4], action: u64) -> u32 {
+        let mut player = PuppyPlayer::get(pkey);
+        match player.as_mut() {
+            None => ERROR_PLAYER_NOT_EXIST,
+            Some(player) => {
+                player.check_and_inc_nonce(self.nonce);
+                player.set_action(action);
+                player.store();
+                QUEUE.0.borrow_mut().insert(0);
+                0
+            }
         }
     }
-}
 
-#[derive (Serialize)]
-pub struct State {
-    counter: u64,
-    game: Game
-}
-
-static mut STATE: State  = State {
-    counter: 0,
-    game: Game {
-        game_id: 0,
-        contents: vec![]
-    }
-};
-
-impl State {
-    pub fn initialize() {
-    }
-    pub fn get_state(pkey: Vec<u64>) -> String {
-        let pid = CombatPlayer::pkey_to_pid(&pkey.try_into().unwrap());
-        zkwasm_rust_sdk::dbg!("====== player {:?} \n", {&pid});
-        let player = CombatPlayer::get_from_pid(&pid);
-        zkwasm_rust_sdk::dbg!("player is none {}\n", {player.is_none()});
-        //zkwasm_rust_sdk::dbg!("player {:?}\n", {&player.data});
-        serde_json::to_string(
-            &player,
-        )
-        .unwrap()
-    }
-    pub fn store() {
+    pub fn process(&self, pkey: &[u64; 4]) -> u32 {
+        let res = match self.command {
+            CREATE_PLAYER => self.create_player(pkey),
+            SHAKE_FEET => self.action(pkey, SHAKE_FEET),
+            JUMP => self.action(pkey, JUMP),
+            SHAKE_HEADS => self.action(pkey, SHAKE_HEADS),
+            POST_COMMENTS => self.action(pkey, POST_COMMENTS),
+            LOTTERY => self.action(pkey, LOTTERY),
+            _ => {
+                QUEUE.0.borrow_mut().tick();
+                0
+            }
+        };
+        let root = unsafe { &mut MERKLE_MAP.merkle.root };
+        zkwasm_rust_sdk::dbg!("root after process {:?}\n", root);
+        res
     }
 }

@@ -1,4 +1,4 @@
-use crate::state::State;
+use crate::state::GlobalState;
 
 const WITHDRAW: u64 = 1;
 
@@ -18,7 +18,7 @@ impl SettleMentInfo {
         }
         //zkwasm_rust_sdk::dbg!("settlement: {:?}\n", bytes);
         sinfo.0 = vec![];
-        State::store();
+        GlobalState::store();
         bytes
     }
 }
