@@ -1,5 +1,6 @@
 use std::collections::LinkedList;
 use zkwasm_rest_abi::MERKLE_MAP;
+use crate::config::get_progress_increments;
 
 #[derive(Clone)]
 pub struct Event {
@@ -77,12 +78,17 @@ impl EventQueue {
 
     pub fn tick(&mut self) {
         self.dump();
+        let progress_increments = get_progress_increments();
         while let Some(_head) = self.list.front_mut() {
-            self.progress += 50; 
+            self.progress += progress_increments.action_reward;
         }
+        self.progress += progress_increments.standard_increment;
         self.counter += 1;
-        self.progress += 1;
         self.list.pop_front();
+
+        if self.progress == 100 {
+           // todo
+        }
     }
 
     pub fn insert(
