@@ -3,6 +3,11 @@ use crate::settlement::SettleMentInfo;
 
 const ACTIONS_SIZE: usize = 5;
 const NAME_SIZE: usize = 5;
+const PLAYER_LIST_KEY_SIZE: usize = 4;
+
+pub fn player_list_key() -> [u64; PLAYER_LIST_KEY_SIZE] {
+    [1,1,1,1]
+}
 
 #[derive(Serialize, Clone)]
 pub struct ProgressIncrements {
