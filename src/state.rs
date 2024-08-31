@@ -48,8 +48,7 @@ const ERROR_PLAYER_NOT_EXIST:u32 = 2;
 
 pub struct Transaction {
     pub command: u64,
-    pub nonce: u64,
-    pub data: Vec<u64>
+    pub nonce: u64
 }
 
 impl Transaction {
@@ -64,11 +63,9 @@ impl Transaction {
     pub fn decode(params: [u64; 4]) -> Self {
         let command = params[0] & 0xff;
         let nonce = params[0] >> 16;
-        let data = vec![params[1], params[2], params[3]];
         Transaction {
             command,
-            nonce,
-            data
+            nonce
         }
     }
 
@@ -93,6 +90,7 @@ impl Transaction {
                 player.check_and_inc_nonce(self.nonce);
                 player.set_action(action);
                 player.store();
+                PLAYERLIST::new().store(pkey);
                 QUEUE.0.borrow_mut().insert(0);
                 0
             }
