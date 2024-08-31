@@ -1,4 +1,5 @@
 import { query, ZKWasmAppRpc, LeHexBN } from "zkwasm-ts-server";
+import { Player } from "./api.js";
 
 const CREATE_PLAYER = 1n;
 const SHAKE_FEET = 2n;
@@ -7,93 +8,47 @@ const SHAKE_HEADS = 4n;
 const POST_COMMENTS = 5n;
 const LOTTERY = 6n;
 
-function createCommand(nonce: bigint, command: bigint) {
-    return (nonce << 16n) + command;
-}
-
 let account = "1234";
-
-const rpc = new ZKWasmAppRpc("http://localhost:3000");
+let player = new Player(account);
 
 async function testCreatePlayer() {
-    let finished = 0;
-    let accountInfo = new LeHexBN(query(account).pkx).toU64Array();
-    console.log("account info:", accountInfo);
-    try {
-        let processStamp = await rpc.sendTransaction([createCommand(0n, CREATE_PLAYER), 0n, 0n, 0n], account);
-        console.log("create player processed at:", processStamp);
-    } catch(e) {
-        let reason = "";
-        if (e instanceof Error) {
-          reason = e.message;
-        }
-        console.log("create player error:", reason);
-    }
+    console.log("Start run CREATE_PLAYER...");
+    await player.runCommand(CREATE_PLAYER, 0n);
+    await player.checkState(0n, 0n, 0n);
+};
 
-    try {
-        let state = await rpc.queryState(account);
-        console.log("query state:", state); 
-    } catch(e) {
-        console.log("query state error:", e);
-    }
+async function testAction() {
+    console.log("Start run SHAKE_FEET...");
+    let nonce = await player.getNonce();
+    await player.runCommand(SHAKE_FEET, nonce);
+    await player.checkState(nonce + 1n, 0n, SHAKE_FEET);
+
+    console.log("Start run JUMP...");
+    nonce = await player.getNonce();
+    await player.runCommand(JUMP, nonce);
+    await player.checkState(nonce + 1n, 0n, JUMP);
+
+    console.log("Start run SHAKE_HEADS...");
+    nonce = await player.getNonce();
+    await player.runCommand(SHAKE_HEADS, nonce);
+    await player.checkState(nonce + 1n, 0n, SHAKE_HEADS);
+
+    console.log("Start run POST_COMMENTS...");
+    nonce = await player.getNonce();
+    await player.runCommand(POST_COMMENTS, nonce);
+    await player.checkState(nonce + 1n, 0n, POST_COMMENTS);
+
+    console.log("Start run LOTTERY...");
+    nonce = await player.getNonce();
+    await player.runCommand(LOTTERY, nonce);
+    await player.checkState(nonce + 1n, 0n, LOTTERY);
 };
 
 async function main() {
-    testCreatePlayer();
+    let accountInfo = new LeHexBN(query(account).pkx).toU64Array();
+    console.log("account info:", accountInfo);
+
+    await testCreatePlayer();
+    await testAction();
 }
 main();
-/*
-test('create player already exists', () => {
-    const cmd = createCommand(0, 1);
-    const transaction = wasm.Transaction.decode([cmd, 0, 0, 0]);
-
-    let res = transaction.create_player(PKEY);
-    expect(res).toBe(0);
-    res = transaction.create_player(PKEY);
-    expect(res).toBe(1);
-});
-
-test('action works', () => {
-    const cmd = createCommand(0, 1);
-    const transaction = wasm.Transaction.decode([cmd, 0, 0, 0]);
-
-    transaction.create_player(PKEY);
-
-    let res = transaction.action(PKEY, 2);
-    let player = wasm.PuppyPlayer.get(PKEY);
-    expect(player.nonce).toBe(1);
-    expect(player.data.current_action).toBe(2);
-    expect(res).toBe(0);
-
-    res = transaction.action(PKEY, 3);
-    player = wasm.PuppyPlayer.get(PKEY);
-    expect(player.nonce).toBe(2);
-    expect(player.data.current_action).toBe(3);
-    expect(res).toBe(0);
-
-    res = transaction.action(PKEY, 4);
-    player = wasm.PuppyPlayer.get(PKEY);
-    expect(player.nonce).toBe(3);
-    expect(player.data.current_action).toBe(4);
-    expect(res).toBe(0);
-
-    res = transaction.action(PKEY, 5);
-    player = wasm.PuppyPlayer.get(PKEY);
-    expect(player.nonce).toBe(4);
-    expect(player.data.current_action).toBe(5);
-    expect(res).toBe(0);
-
-    res = transaction.action(PKEY, 6);
-    player = wasm.PuppyPlayer.get(PKEY);
-    expect(player.nonce).toBe(5);
-    expect(player.data.current_action).toBe(6);
-    expect(res).toBe(0);
-});
-
-test('action player not exist', () => {
-    const cmd = createCommand(0, 1);
-    const transaction = wasm.Transaction.decode([cmd, 0, 0, 0]);
-
-    const res = transaction.action(PKEY, 2);
-    expect(res).toBe(2);
-});*/
