@@ -1,16 +1,15 @@
-use crate::{player::PLAYERLIST};
 use crate::events::EventQueue;
 use std::cell::RefCell;
-use crate::player::{PuppyPlayer};
+use crate::player::{PLAYERLIST, PuppyPlayer, Owner};
 use crate::Player;
 use zkwasm_rest_abi::MERKLE_MAP;
 use serde::{Serialize};
-use crate::player::Owner;
+use crate::reward::{assign_reward_to_player};
 
 #[derive(Serialize)]
 pub struct GlobalState {
     player_list: PLAYERLIST,
-    progress: u64,
+    progress: u64, // Progress in percentage (0 to 100)
     counter: u64
 }
 
@@ -36,6 +35,7 @@ lazy_static::lazy_static! {
     pub static ref QUEUE: SafeEventQueue = SafeEventQueue (RefCell::new(EventQueue::new()));
 }
 
+const SWAY: u64 = 0;
 const CREATE_PLAYER: u64 = 1;
 const SHAKE_FEET: u64 = 2;
 const JUMP: u64 = 3;
@@ -45,6 +45,8 @@ const LOTTERY: u64 = 6;
 
 const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
 const ERROR_PLAYER_NOT_EXIST:u32 = 2;
+const ERROR_NOT_SELECTED_PLAYER:u32 = 3;
+const SELECTED_PLAYER_NOT_EXIST: u32 = 4;
 
 pub struct Transaction {
     pub command: u64,
@@ -56,6 +58,8 @@ impl Transaction {
         match e {
            ERROR_PLAYER_NOT_EXIST => "PlayerNotExist",
            ERROR_PLAYER_ALREADY_EXIST => "PlayerAlreadyExist",
+           ERROR_NOT_SELECTED_PLAYER => "PlayerNotSelected",
+           SELECTED_PLAYER_NOT_EXIST => "selectedPlayerNotExist",
            _ => "Unknown"
         }
     }
@@ -74,7 +78,7 @@ impl Transaction {
         match player {
             Some(_) => ERROR_PLAYER_ALREADY_EXIST,
             None => {
-                let player = Player::new(&pkey);
+                let player = Player::new(pkey);
                 player.store();
                 PLAYERLIST::new().store(pkey);
                 0
@@ -87,12 +91,57 @@ impl Transaction {
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
-                player.check_and_inc_nonce(self.nonce);
-                player.set_action(action);
-                player.store();
-                PLAYERLIST::new().store(pkey);
-                QUEUE.0.borrow_mut().insert(0);
-                0
+                // Check for Lottery action
+                if action == LOTTERY {
+                    // Fetch the player list
+                    let mut player_list = PLAYERLIST::get().unwrap();
+
+                    // Find the selected player
+                    let selected_player = player_list
+                        .0
+                        .iter_mut()
+                        .find(|p| p.data.is_selected == 0);
+
+                    match selected_player {
+                        Some(selected_player) => {
+                            if selected_player.player_id == player.player_id {
+                                // This is the selected player; allow them to open the blind box
+                                zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
+
+                               assign_reward_to_player(player);
+
+                                // Update player's state to reflect that the lottery is complete
+                                player.set_is_selected(1); // Reset is_selected
+                                player.set_action(SWAY);
+
+                                player.store();
+
+                                // Update the global state or player list if needed
+                                PLAYERLIST::new().store(pkey);
+                                QUEUE.0.borrow_mut().insert(pkey, action);
+
+                                0 // Return success
+                            } else {
+                                // The selected player is not the invoking player
+                                zkwasm_rust_sdk::dbg!("Selected player is not the invoking player, pkey is {:?}", pkey);
+                                ERROR_NOT_SELECTED_PLAYER
+                            }
+                        }
+                        _ => {
+                            // The invoking player is not the selected player
+                            zkwasm_rust_sdk::dbg!("No players are selected for the lottery");
+                            SELECTED_PLAYER_NOT_EXIST
+                        }
+                    }
+                } else {
+                    // Normal actions (non-lottery)
+                    player.check_and_inc_nonce(self.nonce);
+                    player.set_action(action);
+                    player.store();
+                    PLAYERLIST::new().store(pkey);
+                    QUEUE.0.borrow_mut().insert(pkey, action);
+                    0
+                }
             }
         }
     }
