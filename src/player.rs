@@ -145,7 +145,7 @@ impl PLAYERLIST {
         let data = kvpair.get(&plist_key);
 
         if data.is_empty() {
-            None
+            Some(PLAYERLIST::new())
         } else {
             let mut result = Vec::new();
             for chunk in data.chunks(8) {
