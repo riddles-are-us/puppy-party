@@ -19,5 +19,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.8"
 zkwasm-rest-abi = { git = "https://github.com/DelphinusLab/zkwasm-typescript-mini-server" }
-rand = "0.8.5"
-getrandom = { version = "0.2", features = ["js"] }
+urandom = "0.1.1"
