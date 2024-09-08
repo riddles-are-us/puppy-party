@@ -1,15 +1,14 @@
 use crate::events::EventQueue;
 use std::cell::RefCell;
-use crate::player::{PLAYERLIST, PuppyPlayer, Owner};
+use crate::player::{PuppyPlayer, Owner};
 use crate::Player;
 use zkwasm_rest_abi::MERKLE_MAP;
 use serde::{Serialize};
-use crate::reward::{assign_reward_to_player};
+use crate::config::{get_initial_delta, get_progress_increments};
 
 #[derive(Serialize)]
 pub struct GlobalState {
-    player_list: PLAYERLIST,
-    progress: u64, // Progress in percentage (0 to 100)
+    player: PuppyPlayer,
     counter: u64
 }
 
@@ -17,11 +16,10 @@ impl GlobalState {
     pub fn initialize() {
     }
 
-    pub fn get_state(_pid: Vec<u64>) -> String {
-        let player_list = PLAYERLIST::get().unwrap();
-        let progress = QUEUE.0.borrow().progress;
+    pub fn get_state(pid: Vec<u64>) -> String {
+        let player = PuppyPlayer::get(&pid.try_into().unwrap()).unwrap();
         let counter = QUEUE.0.borrow().counter;
-        serde_json::to_string(&(player_list, progress, counter)).unwrap()
+        serde_json::to_string(&(player, counter)).unwrap()
     }
 
     pub fn store() {
@@ -30,6 +28,11 @@ impl GlobalState {
 
 pub struct SafeEventQueue(RefCell<EventQueue>);
 unsafe impl Sync for SafeEventQueue {}
+impl SafeEventQueue {
+    pub fn get_counter(&self) -> u64 {
+        self.0.borrow().counter
+    }
+}
 
 lazy_static::lazy_static! {
     pub static ref QUEUE: SafeEventQueue = SafeEventQueue (RefCell::new(EventQueue::new()));
@@ -80,7 +83,8 @@ impl Transaction {
             None => {
                 let player = Player::new(pkey);
                 player.store();
-                PLAYERLIST::new().store(pkey);
+                let initial_delta = get_initial_delta();
+                QUEUE.0.borrow_mut().insert(pkey, initial_delta as usize);
                 0
             }
         }
@@ -91,55 +95,33 @@ impl Transaction {
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
+                // Increase progress by action_reward when player run command
+                let progress_increments = get_progress_increments();
+();
+                player.data.progress += progress_increments.action_reward;
+
+                player.check_and_inc_nonce(self.nonce);
+
+                // Reset delta as long as player run command
+                let initial_delta = get_initial_delta();
+                QUEUE.0.borrow_mut().insert(pkey, initial_delta as usize);
+
                 // Check for Lottery action
                 if action == LOTTERY {
-                    // Fetch the player list
-                    let mut player_list = PLAYERLIST::get().unwrap();
+                    // This is the selected player; allow them to open the blind box
+                    zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
 
-                    // Find the selected player
-                    let selected_player = player_list
-                        .0
-                        .iter_mut()
-                        .find(|p| p.data.is_selected == 0);
-
-                    match selected_player {
-                        Some(selected_player) => {
-                            if selected_player.player_id == player.player_id {
-                                // This is the selected player; allow them to open the blind box
-                                zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
-
-                               assign_reward_to_player(player);
-
-                                // Update player's state to reflect that the lottery is complete
-                                player.set_is_selected(1); // Reset is_selected
-                                player.set_action(SWAY);
-
-                                player.store();
-
-                                // Update the global state or player list if needed
-                                PLAYERLIST::new().store(pkey);
-                                QUEUE.0.borrow_mut().insert(pkey, action);
-
-                                0 // Return success
-                            } else {
-                                // The selected player is not the invoking player
-                                zkwasm_rust_sdk::dbg!("Selected player is not the invoking player, pkey is {:?}", pkey);
-                                ERROR_NOT_SELECTED_PLAYER
-                            }
-                        }
-                        _ => {
-                            // The invoking player is not the selected player
-                            zkwasm_rust_sdk::dbg!("No players are selected for the lottery");
-                            SELECTED_PLAYER_NOT_EXIST
-                        }
-                    }
-                } else {
-                    // Normal actions (non-lottery)
-                    player.check_and_inc_nonce(self.nonce);
-                    player.set_action(action);
+                    // Update player's state to reflect that the lottery is complete
+                    player.data.reward = 0;
+                    player.data.action = SWAY;
+                    player.data.lottery_ticks = 10;
+                    player.data.progress = 0;
                     player.store();
-                    PLAYERLIST::new().store(pkey);
-                    QUEUE.0.borrow_mut().insert(pkey, action);
+
+                    0
+                } else {
+                    player.data.action = action;
+                    player.store();
                     0
                 }
             }

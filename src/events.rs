@@ -1,13 +1,15 @@
 use std::collections::LinkedList;
 use zkwasm_rest_abi::MERKLE_MAP;
-use crate::config::{get_progress_increments};
-use sha2::{Sha256, Digest};
-use crate::player::{PLAYERLIST, Owner, PuppyPlayer};
+use crate::config::get_progress_increments;
+use crate::player::{Owner, PuppyPlayer};
+use crate::reward::assign_reward_to_player;
+
+const SWAY: u64 = 0;
 
 #[derive(Clone)]
 pub struct Event {
     pub owner: [u64; 4],
-    pub current_action: u64
+    pub delta: usize
 }
 
 impl Event {
@@ -16,13 +18,13 @@ impl Event {
         buf.push(self.owner[1]);
         buf.push(self.owner[2]);
         buf.push(self.owner[3]);
-        buf.push(self.current_action);
+        buf.push(self.delta as u64);
         zkwasm_rust_sdk::dbg!("compact {:?}", buf);
     }
 
     fn fetch(buf: &mut Vec<u64>) -> Event {
         zkwasm_rust_sdk::dbg!("fetch{:?}", buf);
-        let current_action = buf.pop().unwrap();
+        let delta = buf.pop().unwrap();
         let mut owner = [
             buf.pop().unwrap(),
             buf.pop().unwrap(),
@@ -32,87 +34,20 @@ impl Event {
         owner.reverse();
         Event {
             owner,
-            current_action
+            delta: delta as usize
         }
     }
 }
 
-const SWAY: u64 = 0;
-const LOTTERY: u64 = 6;
-
 pub struct EventQueue {
     pub counter: u64,
-    pub progress: u64,
     pub list: std::collections::LinkedList<Event>
 }
 
 impl EventQueue {
-    // Helper function to process player ticks
-    fn process_player_ticks(&self, player: &mut PuppyPlayer) {
-        let pkey = PuppyPlayer::to_key(&player.player_id);
-
-        // Decrease remaining_ticks by 1 and check for timeout
-        if player.data.remaining_ticks > 0 {
-            player.data.remaining_ticks -= 1;
-            player.store();
-        }
-        if player.data.remaining_ticks == 0 {
-            PLAYERLIST::new().delete_player(&pkey);
-        }
-
-        // Handle lottery timeout and reset
-        if player.data.is_selected == 0 && player.data.lottery_ticks > 0 {
-            player.data.lottery_ticks -= 1;
-            player.store();
-        }
-        if player.data.is_selected == 0 && player.data.lottery_ticks == 0 {
-            self.reset_lottery_state(player, &pkey);
-        }
-    }
-
-    // Helper function to process player actions
-    fn process_action(&self, owner_id: &[u64; 4], current_action: u64) {
-        let mut player = PuppyPlayer::get(owner_id).unwrap();
-        player.set_remaining_ticks(100);
-
-        if current_action == LOTTERY {
-            player.set_lottery_ticks(10);
-        }
-
-        player.store();
-    }
-
-    // Helper function to reset lottery state for a player
-    fn reset_lottery_state(&self, player: &mut PuppyPlayer, pkey: &[u64;4]) {
-        player.set_action(SWAY);
-        player.set_is_selected(1);
-        player.set_lottery_ticks(10);
-        player.store();
-        PLAYERLIST::new().store(pkey);
-        let player_id = player.player_id;
-        zkwasm_rust_sdk::dbg!("Player {:?} lottery canceled due to timeout.\n", player_id);
-    }
-
-    // Helper function to select a random player for the lottery
-    fn select_random_player_for_lottery(&self, player_list: &mut PLAYERLIST) {
-        let mut hasher = Sha256::new();
-        hasher.update(&self.counter.to_le_bytes());
-        let result: [u8; 32] = hasher.finalize().into();
-
-        let random_index = (result[0] as usize) % player_list.0.len();
-        let selected_player = player_list.0.get(random_index).unwrap();
-
-        let pkey = PuppyPlayer::to_key(&selected_player.player_id);
-        let mut player = PuppyPlayer::get(&pkey).unwrap();
-        player.set_is_selected(0);
-        player.store();
-        PLAYERLIST::new().store(&pkey);
-    }
-
     pub fn new() -> Self {
         EventQueue {
             counter: 0,
-            progress: 0,
             list: LinkedList::new(),
         }
     }
@@ -124,7 +59,6 @@ impl EventQueue {
             e.compact(&mut v);
         }
         v.push(self.counter);
-        v.push(self.progress);
         let kvpair = unsafe { &mut MERKLE_MAP };
         kvpair.set(&[0, 0, 0, 0], v.as_slice());
         let root = kvpair.merkle.root.clone();
@@ -136,13 +70,11 @@ impl EventQueue {
         let mut data = kvpair.get(&[0, 0, 0, 0]);
         if !data.is_empty() {
             let counter = data.pop().unwrap();
-            let progress = data.pop().unwrap();
             let mut list = LinkedList::new();
             while !data.is_empty() {
                 list.push_back(Event::fetch(&mut data))
             }
             self.counter = counter;
-            self.progress = progress;
             self.list = list;
         }
     }
@@ -160,45 +92,68 @@ impl EventQueue {
         self.dump();
         let progress_increments = get_progress_increments();
 
-        // Retrieve the player list
-        let mut player_list = PLAYERLIST::get().unwrap();
-
-        // Update progress and handle player ticks
-        if self.list.is_empty() {
-            self.progress += progress_increments.standard_increment;
-            for player in player_list.0.iter_mut() {
-                self.process_player_ticks(player);
-            }
-        } else {
-            while let Some(head) = self.list.front_mut() {
-                self.progress += progress_increments.action_reward;
-                let owner_id = head.owner;
-                let current_action = head.current_action;
-                self.process_action(&owner_id, current_action);
+        while let Some(mut head) = self.list.pop_front() {
+            if head.delta == 0 {
                 self.list.pop_front();
-            }
-        }
+            } else {
+                let owner_id = head.owner;
+                let mut player = PuppyPlayer::get(&owner_id).unwrap();
+    
+                // Decrease delta by 1 for every player
+                head.delta -= 1;
+                
+                // Increase progress by standard_increment
+                player.data.progress = player.data.progress + progress_increments.standard_increment;
 
+                // Check lottery_ticks and update accordingly
+                if player.data.reward != 0 {
+                    if player.data.lottery_ticks == 0 {
+                        player.data.reward = 0;
+                        player.data.lottery_ticks = 10;
+                        player.data.progress = 0;
+                        player.data.action = SWAY;
+                    }
+                    player.data.lottery_ticks -= 1;
+                }
+    
+                // Check if progress reached 1
+                if player.data.progress >= 1 {
+                    assign_reward_to_player(&mut player);
+                }
+
+                player.store();
+            }  
+        }
         self.counter += 1;
-
-        // Select a random player to open a blind box if progress is sufficient
-        if self.progress >= 100 {
-            self.select_random_player_for_lottery(&mut player_list);
-        }
     }
 
     pub fn insert(
-      &mut self,
-      owner: &[u64; 4],
-      current_action: u64
+        &mut self,
+        owner: &[u64; 4],
+        delta: usize,
     ) {
         let mut list = LinkedList::new();
-        let node = Event {
-            owner: owner.clone(),
-            current_action
-        };
-        list.push_back(node);
-        list.append(&mut self.list);
+        let delta = delta;
+        let mut found = false;
+
+        // Search event with same owner
+        while let Some(mut event) = self.list.pop_front() {
+            // Reset delta to initial_delta(100)
+            if event.owner == *owner {
+                found = true;
+                event.delta = 100;
+            }
+
+            list.push_back(event);
+        }
+    
+        if !found {
+            let node = Event {
+                owner: owner.clone(),
+                delta,
+            };
+            list.push_back(node);
+        }
         self.list = list;
     }
 }

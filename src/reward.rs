@@ -1,4 +1,6 @@
-use crate::player::{PuppyPlayer, Owner};
+use crate::player::{PuppyPlayer};
+use sha2::{Sha256, Digest};
+use crate::state::QUEUE;
 
 #[derive(Debug, Clone)]
 pub enum DrinkReward {
@@ -28,8 +30,12 @@ impl DrinkReward {
 }
 
 fn select_random_drink_reward() -> DrinkReward {
-    let mut rng = urandom::new();
-    let reward = match rng.range(0..=100) {
+    let counter = QUEUE.get_counter();
+    let mut hasher = Sha256::new();
+    hasher.update(counter.to_le_bytes());
+    let result: [u8; 32] = hasher.finalize().into();
+    let random_index = (result[0] as usize) % 101;
+    let reward = match random_index {
         0..=10 => DrinkReward::Champagne,   // 10% chance
         11..=20 => DrinkReward::Cognac,     // 10% chance
         21..=40 => DrinkReward::Whiskey,    // 20% chance
@@ -39,13 +45,12 @@ fn select_random_drink_reward() -> DrinkReward {
         81..=100 => DrinkReward::Beer,      // 20% chance
         _ => DrinkReward::Cocktail,         // Default to Cocktail (unlikely)
     };
-
     reward
 }
 
 pub fn assign_reward_to_player(player: &mut PuppyPlayer) {
     let reward = select_random_drink_reward();
-    player.set_reward(reward.reward_value());
+    player.data.reward = reward.reward_value();
     let player_id = player.player_id;
     zkwasm_rust_sdk::dbg!("Player {:?} has received a reward", player_id);
 }

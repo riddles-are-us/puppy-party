@@ -3,11 +3,6 @@ use crate::settlement::SettleMentInfo;
 
 const ACTIONS_SIZE: usize = 5;
 const NAME_SIZE: usize = 5;
-const PLAYER_LIST_KEY_SIZE: usize = 4;
-
-pub fn player_list_key() -> [u64; PLAYER_LIST_KEY_SIZE] {
-    [1,1,1,1]
-}
 
 #[derive(Serialize, Clone)]
 pub struct ProgressIncrements {
@@ -19,7 +14,8 @@ pub struct ProgressIncrements {
 pub struct Config {
     actions: [&'static str; ACTIONS_SIZE],
     name: [&'static str; NAME_SIZE],
-    pub progress_increments: ProgressIncrements
+    pub progress_increments: ProgressIncrements,
+    initial_delta: u64
 }
 
 lazy_static::lazy_static! {
@@ -28,8 +24,9 @@ lazy_static::lazy_static! {
         name: ["Bob", "Frank", "Cindy", "Alice", "John"],
         progress_increments: ProgressIncrements {
             standard_increment: 1,
-            action_reward: 50
-        }
+            action_reward: 5
+        },
+        initial_delta: 100
     };
 }
 
@@ -45,4 +42,8 @@ impl Config {
 
 pub fn get_progress_increments() -> &'static ProgressIncrements {
     &CONFIG.progress_increments
+}
+
+pub fn get_initial_delta() -> u64 {
+    CONFIG.initial_delta
 }
