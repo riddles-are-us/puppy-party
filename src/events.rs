@@ -1,4 +1,4 @@
-use std::collections::{LinkedList};
+use std::collections::LinkedList;
 use zkwasm_rest_abi::MERKLE_MAP;
 use crate::config::get_progress_increments;
 use crate::player::{Owner, PuppyPlayer};
@@ -48,7 +48,7 @@ impl EventQueue {
     pub fn new() -> Self {
         EventQueue {
             counter: 0,
-            list: LinkedList::new()
+            list: LinkedList::new(),
         }
     }
 
@@ -68,8 +68,11 @@ impl EventQueue {
 
             // Start collecting players once we find the player with pkey
             if start_collecting {
-                if let Some(player) = PuppyPlayer::get(&owner) {
-                    players.push(player);
+                match PuppyPlayer::get(&owner) {
+                    Some(player) => players.push(player),
+                    None => {
+                        zkwasm_rust_sdk::dbg!("Player with owner {:?} not found", owner);
+                    }
                 }
 
                 // Stop if we have reached 20 players
@@ -113,7 +116,8 @@ impl EventQueue {
         zkwasm_rust_sdk::dbg!("=-=-= dump queue =-=-=\n");
         for m in self.list.iter() {
             let owner = m.owner;
-            zkwasm_rust_sdk::dbg!("{:?}\n", owner);
+            let delta = m.delta;
+            zkwasm_rust_sdk::dbg!("{:?} - {}\n", owner, delta);
         }
         zkwasm_rust_sdk::dbg!("=-=-= end =-=-=\n");
     }
@@ -122,39 +126,55 @@ impl EventQueue {
         self.dump();
         let progress_increments = get_progress_increments();
 
+        // Create a new LinkedList to store elements that should be kept
+        let mut new_list = LinkedList::new();
+
+        // Use drain_filter to iterate and remove elements where delta is 0
         while let Some(mut head) = self.list.pop_front() {
             if head.delta == 0 {
-                self.list.pop_front();
-            } else {
-                let owner_id = head.owner;
-                let mut player = PuppyPlayer::get(&owner_id).unwrap();
-    
-                // Decrease delta by 1 for every player
-                head.delta -= 1;
-                
-                // Increase progress by standard_increment
-                player.data.progress = player.data.progress + progress_increments.standard_increment;
+                // Skip this element (don't add to new_list)
+                continue;
+            }
 
-                // Check lottery_ticks and update accordingly
-                if player.data.reward != 0 {
-                    if player.data.lottery_ticks == 0 {
-                        player.data.reward = 0;
-                        player.data.lottery_ticks = 10;
-                        player.data.progress = 0;
-                        player.data.action = SWAY;
-                    }
-                    player.data.lottery_ticks -= 1;
+            let owner_id = head.owner;
+            let mut player = match PuppyPlayer::get(&owner_id) {
+                Some(p) => p,
+                None => {
+                    zkwasm_rust_sdk::dbg!("Player not found for owner_id: {:?}", owner_id);
+                    continue;
                 }
-    
-                // Check if progress reached 1
-                if player.data.progress >= 1 {
-                    assign_reward_to_player(&mut player);
-                }
+            };
 
-                player.store();
-            }  
+            // Decrease delta by 1 for every player
+            head.delta -= 1;
+
+            // Increase progress by standard_increment
+            player.data.progress = player.data.progress + progress_increments.standard_increment;
+
+            // Check lottery_ticks and update accordingly
+            if player.data.reward != 0 {
+                if player.data.lottery_ticks == 0 {
+                    player.data.reward = 0;
+                    player.data.lottery_ticks = 10;
+                    player.data.progress = 0;
+                    player.data.action = SWAY;
+                }
+                player.data.lottery_ticks -= 1;
+            }
+
+            // Check if progress reached 1
+            if player.data.progress >= 1 {
+                assign_reward_to_player(&mut player);
+            }
+
+            player.store();
+
+            // Add the modified head back to the new list
+            new_list.push_back(head);
         }
+
         self.counter += 1;
+        self.list = new_list;
     }
 
     pub fn insert(

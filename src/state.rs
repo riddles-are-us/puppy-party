@@ -20,9 +20,9 @@ impl GlobalState {
     pub fn get_state(pid: Vec<u64>) -> String {
         let player = PuppyPlayer::get(&pid.try_into().unwrap()).unwrap();
         let pkey = PuppyPlayer::to_key(&player.player_id);
-        let play_list = QUEUE.0.borrow_mut().get_players(pkey);
+        let player_list = QUEUE.0.borrow_mut().get_players(pkey);
         let counter = QUEUE.0.borrow().counter;
-        serde_json::to_string(&(player, play_list, counter)).unwrap()
+        serde_json::to_string(&(player, player_list, counter)).unwrap()
     }
 
     pub fn store() {
