@@ -9,6 +9,7 @@ use crate::config::{get_initial_delta, get_progress_increments};
 #[derive(Serialize)]
 pub struct GlobalState {
     player: PuppyPlayer,
+    play_list: Vec<PuppyPlayer>,
     counter: u64
 }
 
@@ -18,8 +19,10 @@ impl GlobalState {
 
     pub fn get_state(pid: Vec<u64>) -> String {
         let player = PuppyPlayer::get(&pid.try_into().unwrap()).unwrap();
+        let pkey = PuppyPlayer::to_key(&player.player_id);
+        let play_list = QUEUE.0.borrow_mut().get_players(pkey);
         let counter = QUEUE.0.borrow().counter;
-        serde_json::to_string(&(player, counter)).unwrap()
+        serde_json::to_string(&(player, play_list, counter)).unwrap()
     }
 
     pub fn store() {
@@ -97,7 +100,7 @@ impl Transaction {
             Some(player) => {
                 // Increase progress by action_reward when player run command
                 let progress_increments = get_progress_increments();
-();
+
                 player.data.progress += progress_increments.action_reward;
 
                 player.check_and_inc_nonce(self.nonce);

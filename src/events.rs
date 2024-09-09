@@ -1,4 +1,4 @@
-use std::collections::LinkedList;
+use std::collections::{LinkedList};
 use zkwasm_rest_abi::MERKLE_MAP;
 use crate::config::get_progress_increments;
 use crate::player::{Owner, PuppyPlayer};
@@ -48,8 +48,38 @@ impl EventQueue {
     pub fn new() -> Self {
         EventQueue {
             counter: 0,
-            list: LinkedList::new(),
+            list: LinkedList::new()
         }
+    }
+
+    // Get top 20 players includes
+    pub fn get_players(&mut self, pkey: [u64; 4]) -> Vec<PuppyPlayer> {
+        let mut players = Vec::new();
+        let mut start_collecting = false;
+
+        // Iterate over the events
+        for event in &self.list {
+            let owner = event.owner;
+
+            // Check if we found the starting player with pkey
+            if owner == pkey {
+                start_collecting = true;
+            }
+
+            // Start collecting players once we find the player with pkey
+            if start_collecting {
+                if let Some(player) = PuppyPlayer::get(&owner) {
+                    players.push(player);
+                }
+
+                // Stop if we have reached 20 players
+                if players.len() >= 20 {
+                    break;
+                }
+            }
+        }
+
+        players
     }
 
     pub fn store(&self) {

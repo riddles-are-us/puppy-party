@@ -1,7 +1,7 @@
 use crate::StorageData;
 use serde::{Serialize};
-use crate::Player;
 use core::slice::IterMut;
+use crate::Player;
 
 #[derive(Clone, Serialize, Debug)]
 pub struct PlayerData {
