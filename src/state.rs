@@ -4,11 +4,27 @@ use crate::player::{PuppyPlayer, Owner};
 use crate::Player;
 use zkwasm_rest_abi::MERKLE_MAP;
 use serde::{Serialize};
+use crate::player::PlayerData;
 use crate::config::{get_initial_delta, get_progress_increments};
+
+#[derive(Serialize, Clone)]
+pub struct QueryPlayerState {
+    pid: String,
+    data: PlayerData,
+}
+
+impl QueryPlayerState {
+    fn from(p: &PuppyPlayer) -> Self {
+        QueryPlayerState {
+            pid: format!("{}-{}", p.player_id[0], p.player_id[1]),
+            data: p.data.clone()
+        }
+    }
+}
 
 #[derive(Serialize)]
 pub struct GlobalState {
-    player_id_list: Vec<[u64; 2]>,
+    player_list: Vec<QueryPlayerState>,
     counter: u64
 }
 
@@ -16,13 +32,13 @@ pub struct GlobalState {
 pub struct QueryState {
     player: PuppyPlayer,
     counter: u64,
-    player_list: Vec<PuppyPlayer>,
+    player_list: Vec<QueryPlayerState>,
 }
 
 impl GlobalState {
     pub fn new() -> Self {
         GlobalState {
-            player_id_list: vec![],
+            player_list: vec![],
             counter: 0,
         }
     }
@@ -30,36 +46,29 @@ impl GlobalState {
     }
 
     pub fn update_player_id_list(player: &mut PuppyPlayer) {
+        let player_data = QueryPlayerState::from(player);
         let mut exist = false;
-        let mut player_id_list = GLOBAL_STATE.0.borrow_mut().player_id_list;
-        for p in player_id_list {
-            if p == player.player_id {
+        let mut global_state = GLOBAL_STATE.0.borrow_mut();
+        for p in global_state.player_list.iter_mut() {
+            if p.pid == player_data.pid {
+                *p = player_data.clone();
                 exist = true;
             }
         }
         if exist == false {
-            for p in player_id_list {
-              let pkey = PuppyPlayer::to_key(&p);
-              let p_player = PuppyPlayer::get(&pkey.try_into().unwrap()).unwrap();
-              if p_player.data.progress < player.data.progress {
-                  p = player.player_id;
+            for p in global_state.player_list.iter_mut() {
+              if p.data.progress < player_data.data.progress {
+                  *p = player_data.clone();
               }
+              break;
             }
         }
     }
 
     pub fn get_state(pid: Vec<u64>) -> String {
         let player = PuppyPlayer::get(&pid.try_into().unwrap()).unwrap();
-        let player_id_list = GLOBAL_STATE.0.borrow().player_id_list;
+        let player_list = GLOBAL_STATE.0.borrow().player_list.clone();
         let counter = GLOBAL_STATE.0.borrow().counter;
-
-        let mut player_list = vec![];
-        for p in player_id_list {
-            let pkey = PuppyPlayer::to_key(&p);
-            let player = PuppyPlayer::get(&pkey.try_into().unwrap()).unwrap();
-            player_list.push(player);
-        }
-
         serde_json::to_string({
             &QueryState {
                 player,
