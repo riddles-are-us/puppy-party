@@ -5,20 +5,20 @@ use crate::Player;
 
 #[derive(Clone, Serialize, Debug)]
 pub struct PlayerData {
-    pub name: u64, // index of name in config
+    pub balance: u64,
     pub action: u64,
-    pub lottery_ticks: u64, // Starts at 10
-    pub reward: u64,
+    pub last_lottery_timestamp: u64, // last timestamp when this user allowed to pick a lottery
+    pub last_action_timestamp: u64, // last timestamp when this user allowed to pick a lottery
     pub progress: u64
 }
 
 impl Default for PlayerData {
     fn default() -> Self {
         Self {
-            name: 0,
             action: 0,
-            lottery_ticks: 10,
-            reward: 0,
+            last_lottery_timestamp: 0,
+            last_action_timestamp: 0, // last timestamp when this user allowed to pick a lottery
+            balance: 0,
             progress: 0
         }
     }
@@ -27,18 +27,18 @@ impl Default for PlayerData {
 impl StorageData for PlayerData {
     fn from_data(u64data: &mut IterMut<u64>) -> Self {
         PlayerData {
-            name: *u64data.next().unwrap(),
             action: *u64data.next().unwrap(),
-            lottery_ticks: *u64data.next().unwrap(),
-            reward: *u64data.next().unwrap(),
+            last_lottery_timestamp: *u64data.next().unwrap(),
+            last_action_timestamp: *u64data.next().unwrap(),
+            balance: *u64data.next().unwrap(),
             progress: *u64data.next().unwrap()
         }
     }
     fn to_data(&self, data: &mut Vec<u64>) {
-        data.push(self.name);
         data.push(self.action);
-        data.push(self.lottery_ticks);
-        data.push(self.reward);
+        data.push(self.last_lotter_timestamp);
+        data.push(self.last_action_timestamp);
+        data.push(self.balance);
         data.push(self.progress);
     }
 }

@@ -28,6 +28,8 @@ lazy_static::lazy_static! {
         },
         initial_delta: 100
     };
+
+
 }
 
 impl Config {
@@ -35,8 +37,9 @@ impl Config {
         serde_json::to_string(&CONFIG.clone()).unwrap()
     }
 
-    pub fn flush_settlement() -> Vec<u8> {
-        SettleMentInfo::flush_settlement()
+    // enable timer tick
+    pub fn autotick() -> bool {
+        true
     }
 }
 

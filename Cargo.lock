@@ -57,7 +57,7 @@ dependencies = [
 [[package]]
 name = "derive_builder"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/zkWasm-rust.git#3dc33e15c9e2b6ee502d538a5e715f8ac88083f7"
+source = "git+https://github.com/DelphinusLab/zkWasm-rust.git#8df82a598633937145150fa52824cd9c5d80a0bd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -334,7 +334,7 @@ checksum = "af190c94f2773fdb3729c55b007a722abb5384da03bc0986df4c289bf5567e96"
 [[package]]
 name = "zkwasm-rest-abi"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/zkwasm-typescript-mini-server#b31d886d8669f1572c362d90797bd0ee97a8ba4e"
+source = "git+https://github.com/DelphinusLab/zkwasm-typescript-mini-server#7a0c11728ec6be837e44bb0723bf78f0882be933"
 dependencies = [
  "derive_builder",
  "lazy_static",
@@ -349,7 +349,7 @@ dependencies = [
 [[package]]
 name = "zkwasm-rust-sdk"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/zkWasm-rust.git#3dc33e15c9e2b6ee502d538a5e715f8ac88083f7"
+source = "git+https://github.com/DelphinusLab/zkWasm-rust.git#8df82a598633937145150fa52824cd9c5d80a0bd"
 dependencies = [
  "derive_builder",
  "primitive-types",
