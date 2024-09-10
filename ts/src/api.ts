@@ -1,6 +1,8 @@
 import { ZKWasmAppRpc } from "zkwasm-ts-server";
 
+const SWAY = 0n;
 const CREATE_PLAYER = 1n;
+const LOTTERY = 6n;
 
 function createCommand(command: bigint, nonce: bigint) {
   return (nonce << 16n) + command;
@@ -29,9 +31,11 @@ export class Player {
 
   async runCommand(command: bigint, nonce: bigint) {
     try {
+      console.log("command", command, "nonce", nonce);
       let processStamp = await rpc.sendTransaction([createCommand(command, nonce), 0n, 0n, 0n], this.processingKey);
       console.log("command processed at:", processStamp);
     } catch(e) {
+      console.log(e)
       let reason = "";
       if (e instanceof Error) {
         reason = e.message;
@@ -41,16 +45,19 @@ export class Player {
   }
 
   // Check whether the current state is as expected
-  async checkState(nonce: bigint, name: bigint, current_action: bigint) {
+  async checkState(nonce: bigint, action: bigint, balance: bigint) {
     try {
       let data = await this.getState();
-      let nonce_after_command = data[0][0].nonce;
-      let state_name_after_command = data[0][0].data.name;
-      let current_action_after_command = data[0][0].data.current_action;
-      if(nonce == BigInt(nonce_after_command) && name == BigInt(state_name_after_command) && current_action == BigInt(current_action_after_command)) {
+      let nonce_after_command = data.player.nonce;
+      let balance_after_command = data.player.data.balance;
+      let action_after_command = data.player.data.action;
+      if(action == LOTTERY) {
+        console.log("balance_after_command", balance_after_command, data);
+      }
+      if(nonce == BigInt(nonce_after_command) && action == BigInt(action_after_command) && balance == BigInt(balance_after_command)) {
           console.log("command works");
       } else {
-          console.log("command failed. current state's nonce:", current_action_after_command, ", name:", state_name_after_command, ", current_action:", current_action_after_command);
+          console.log("command failed. current state's nonce:", nonce_after_command, ", balance:", balance_after_command, ", action:", action_after_command);
       }
     } catch(e) {
       console.log("query state error:", e);
@@ -63,9 +70,17 @@ export class Player {
       await this.checkState(0n, 0n, 0n);
     } else {
       let data = await this.getState();
-      let nonce_before_command = BigInt(data[0][0].nonce);
+      let nonce_before_command = BigInt(data.player.nonce);
       await this.runCommand(command, BigInt(nonce_before_command));
-      await this.checkState(nonce_before_command + 1n, 0n, command);
+      
+      let balance = 0n;
+      // Run lottery once on test.ts, so balance is 10, action become SWAY
+      if(command == LOTTERY) {
+        balance = 10n;
+        await this.checkState(nonce_before_command + 1n, SWAY, balance);
+      } else {
+        await this.checkState(nonce_before_command + 1n, command, balance);
+      }
     }
   }
 }
