@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use zkwasm_rest_abi::MERKLE_MAP;
 use crate::config::get_progress_increments;
 use crate::player::{Owner, PuppyPlayer};
-use crate::reward::assign_reward_to_player;
+//use crate::reward::assign_reward_to_player;
 
 const SWAY: u64 = 0;
 
@@ -164,7 +164,7 @@ impl EventQueue {
 
             // Check if progress reached 1
             if player.data.progress >= 1 {
-                assign_reward_to_player(&mut player);
+                //assign_reward_to_player(&mut player);
             }
 
             player.store();
