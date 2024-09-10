@@ -1,5 +1,5 @@
 use crate::settlement::SettleMentInfo;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use crate::player::{PuppyPlayer, Owner};
 use crate::Player;
 use zkwasm_rest_abi::MERKLE_MAP;
@@ -45,10 +45,10 @@ impl GlobalState {
     pub fn initialize() {
     }
 
-    pub fn update_player_id_list(player: &mut PuppyPlayer) {
+    pub fn update_player_list(player: &mut PuppyPlayer, mut global_state: RefMut<'_, GlobalState>) {
         let player_data = QueryPlayerState::from(player);
         let mut exist = false;
-        let mut global_state = GLOBAL_STATE.0.borrow_mut();
+
         for p in global_state.player_list.iter_mut() {
             if p.pid == player_data.pid {
                 *p = player_data.clone();
@@ -114,8 +114,8 @@ const ERROR_PLAYER_NOT_EXIST:u32 = 2;
 const ERROR_NOT_SELECTED_PLAYER:u32 = 3;
 const SELECTED_PLAYER_NOT_EXIST: u32 = 4;
 const PLAYER_ACTION_NOT_FINISHED: u32 = 5;
-const PLAYER_LOTTER_EXPIRED: u32 = 6;
-const PLAYER_LOTTER_PROGRESS_NOT_FULL: u32 = 7;
+const PLAYER_LOTTERY_EXPIRED: u32 = 6;
+const PLAYER_LOTTERY_PROGRESS_NOT_FULL: u32 = 7;
 
 pub struct Transaction {
     pub command: u64,
@@ -128,8 +128,10 @@ impl Transaction {
            ERROR_PLAYER_NOT_EXIST => "PlayerNotExist",
            ERROR_PLAYER_ALREADY_EXIST => "PlayerAlreadyExist",
            ERROR_NOT_SELECTED_PLAYER => "PlayerNotSelected",
-           SELECTED_PLAYER_NOT_EXIST => "selectedPlayerNotExist",
-           PLAYER_ACTION_NOT_FINISHED => "playerActionNotFinished",
+           SELECTED_PLAYER_NOT_EXIST => "SelectedPlayerNotExist",
+           PLAYER_ACTION_NOT_FINISHED => "PlayerActionNotFinished",
+           PLAYER_LOTTERY_EXPIRED => "PlayerLotteryExpired",
+           PLAYER_LOTTERY_PROGRESS_NOT_FULL => "PlayerLotteryProgressNotFull",
            _ => "Unknown"
         }
     }
@@ -157,7 +159,7 @@ impl Transaction {
 
     pub fn action(&self, pkey: &[u64; 4], action: u64, rand: &[u64; 4]) -> u32 {
         let mut player = PuppyPlayer::get(pkey);
-        let state = GLOBAL_STATE.0.borrow();
+        let state = GLOBAL_STATE.0.borrow_mut();
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
@@ -187,10 +189,10 @@ impl Transaction {
                             player.data.progress = 0;
                             player.data.last_lottery_timestamp = 0;
                             player.store();
-                            PLAYER_LOTTER_EXPIRED
+                            PLAYER_LOTTERY_EXPIRED
                         }
                     } else {
-                        PLAYER_LOTTER_PROGRESS_NOT_FULL
+                        PLAYER_LOTTERY_PROGRESS_NOT_FULL
                     }
                 } else {
                     if player.data.last_action_timestamp != 0
@@ -204,7 +206,7 @@ impl Transaction {
                             player.data.progress = 1000;
                             player.data.last_lottery_timestamp = state.counter;
                         }
-                        GlobalState::update_player_id_list(player);
+                        GlobalState::update_player_list(player, state);
                         player.store();
                         0
                     }
