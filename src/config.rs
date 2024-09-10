@@ -1,5 +1,4 @@
 use serde::Serialize;
-use crate::settlement::SettleMentInfo;
 
 const ACTIONS_SIZE: usize = 5;
 const NAME_SIZE: usize = 5;
@@ -24,7 +23,7 @@ lazy_static::lazy_static! {
         name: ["Bob", "Frank", "Cindy", "Alice", "John"],
         progress_increments: ProgressIncrements {
             standard_increment: 1,
-            action_reward: 5
+            action_reward: 50
         },
         initial_delta: 100
     };

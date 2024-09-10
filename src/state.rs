@@ -1,4 +1,3 @@
-use crate::events::EventQueue;
 use crate::settlement::SettleMentInfo;
 use std::cell::RefCell;
 use crate::player::{PuppyPlayer, Owner};
@@ -9,41 +8,41 @@ use crate::config::{get_initial_delta, get_progress_increments};
 
 #[derive(Serialize)]
 pub struct GlobalState {
-    play_list: Vec<PuppyPlayer>,
+    player_id_list: Vec<[u64; 2]>,
     counter: u64
 }
 
+#[derive(Serialize)]
 pub struct QueryState {
     player: PuppyPlayer,
     counter: u64,
     player_list: Vec<PuppyPlayer>,
 }
 
-
-
 impl GlobalState {
     pub fn new() -> Self {
         GlobalState {
-            play_list: vec![],
+            player_id_list: vec![],
             counter: 0,
         }
     }
     pub fn initialize() {
     }
 
-    pub fn update_player_list(&player: PuppyPlayer) {
+    pub fn update_player_id_list(player: &mut PuppyPlayer) {
         let mut exist = false;
-        let mut player_list = GLOBAL_STATE.0.borrow_mut().player_list;
-        for p in player_list {
-            if p.player_id == player.id {
-                *p= player;
+        let mut player_id_list = GLOBAL_STATE.0.borrow_mut().player_id_list;
+        for p in player_id_list {
+            if p == player.player_id {
                 exist = true;
             }
         }
         if exist == false {
-            for p in player_list {
-              if p.data.progress < player.data.progress {
-                  *p = player
+            for p in player_id_list {
+              let pkey = PuppyPlayer::to_key(&p);
+              let p_player = PuppyPlayer::get(&pkey.try_into().unwrap()).unwrap();
+              if p_player.data.progress < player.data.progress {
+                  p = player.player_id;
               }
             }
         }
@@ -51,9 +50,16 @@ impl GlobalState {
 
     pub fn get_state(pid: Vec<u64>) -> String {
         let player = PuppyPlayer::get(&pid.try_into().unwrap()).unwrap();
-        let pkey = PuppyPlayer::to_key(&player.player_id);
-        let player_list = GLOBAL_STATE.0.player_list;
+        let player_id_list = GLOBAL_STATE.0.borrow().player_id_list;
         let counter = GLOBAL_STATE.0.borrow().counter;
+
+        let mut player_list = vec![];
+        for p in player_id_list {
+            let pkey = PuppyPlayer::to_key(&p);
+            let player = PuppyPlayer::get(&pkey.try_into().unwrap()).unwrap();
+            player_list.push(player);
+        }
+
         serde_json::to_string({
             &QueryState {
                 player,
@@ -81,11 +87,6 @@ impl GlobalState {
 
 pub struct SafeState (RefCell<GlobalState>);
 unsafe impl Sync for SafeState {}
-impl SafeState {
-    pub fn get_counter(&self) -> u64 {
-        self.counter
-    }
-}
 
 lazy_static::lazy_static! {
     pub static ref GLOBAL_STATE: SafeState = SafeState(RefCell::new(GlobalState::new()));
@@ -104,6 +105,8 @@ const ERROR_PLAYER_NOT_EXIST:u32 = 2;
 const ERROR_NOT_SELECTED_PLAYER:u32 = 3;
 const SELECTED_PLAYER_NOT_EXIST: u32 = 4;
 const PLAYER_ACTION_NOT_FINISHED: u32 = 5;
+const PLAYER_LOTTER_EXPIRED: u32 = 6;
+const PLAYER_LOTTER_PROGRESS_NOT_FULL: u32 = 7;
 
 pub struct Transaction {
     pub command: u64,
@@ -145,7 +148,7 @@ impl Transaction {
 
     pub fn action(&self, pkey: &[u64; 4], action: u64, rand: &[u64; 4]) -> u32 {
         let mut player = PuppyPlayer::get(pkey);
-        let mut state = GLOBAL_STATE.borrow_mut();
+        let state = GLOBAL_STATE.0.borrow();
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
@@ -155,26 +158,25 @@ impl Transaction {
 
                 // Reset delta as long as player run command
                 let initial_delta = get_initial_delta();
-                QUEUE.0.borrow_mut().insert(pkey, initial_delta as usize);
 
                 // Check for Lottery action
                 if action == LOTTERY {
                     // This is the selected player; allow them to open the blind box
                     zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
-                    if (player.progress == 1000) {
-                        if (player.last_lotter_timestamp + 10 > counter) {
+                    if player.data.progress == 1000 {
+                        if player.data.last_lottery_timestamp + 10 > state.counter {
                             // Update player's state to reflect that the lottery is complete
                             player.data.balance += 10; // change 10 to random reward
                             player.data.action = SWAY;
                             player.data.progress = 0;
-                            playter.last_lotter_timestamp = 0;
-                            playter.last_action_timestamp = 0;
+                            player.data.last_lottery_timestamp = 0;
+                            player.data.last_action_timestamp = 0;
                             player.store();
                             0
                         } else {
                             player.data.action = SWAY;
                             player.data.progress = 0;
-                            playter.last_lotter_timestamp = 0;
+                            player.data.last_lottery_timestamp = 0;
                             player.store();
                             PLAYER_LOTTER_EXPIRED
                         }
@@ -182,18 +184,18 @@ impl Transaction {
                         PLAYER_LOTTER_PROGRESS_NOT_FULL
                     }
                 } else {
-                    if (player.last_action_timestamp != 0
-                        && state.counter < player.last_action_timestamp + 3) { // change 3 to config
+                    if player.data.last_action_timestamp != 0
+                        && state.counter < player.data.last_action_timestamp + 3 { // change 3 to config
                         PLAYER_ACTION_NOT_FINISHED
                     } else {
                         player.data.action = action;
-                        player.last_action_timestamp = state.counter;
+                        player.data.last_action_timestamp = state.counter;
                         player.data.progress += progress_increments.action_reward;
-                        if (player.data.progress > 1000) {
+                        if player.data.progress > 1000 {
                             player.data.progress = 1000;
-                            player.last_lotter_timestamp = counter;
+                            player.data.last_lottery_timestamp = state.counter;
                         }
-                        update_player_list(&player);
+                        GlobalState::update_player_id_list(player);
                         player.store();
                         0
                     }
@@ -210,10 +212,7 @@ impl Transaction {
             SHAKE_HEADS => self.action(pkey, SHAKE_HEADS, rand),
             POST_COMMENTS => self.action(pkey, POST_COMMENTS, rand),
             LOTTERY => self.action(pkey, LOTTERY, rand),
-            _ => {
-                QUEUE.0.borrow_mut().tick();
-                0
-            }
+            _ => 0
         };
         let root = unsafe { &mut MERKLE_MAP.merkle.root };
         zkwasm_rust_sdk::dbg!("root after process {:?}\n", root);

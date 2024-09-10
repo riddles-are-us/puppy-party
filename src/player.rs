@@ -36,7 +36,7 @@ impl StorageData for PlayerData {
     }
     fn to_data(&self, data: &mut Vec<u64>) {
         data.push(self.action);
-        data.push(self.last_lotter_timestamp);
+        data.push(self.last_lottery_timestamp);
         data.push(self.last_action_timestamp);
         data.push(self.balance);
         data.push(self.progress);
