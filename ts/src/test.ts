@@ -11,6 +11,12 @@ const LOTTERY = 6n;
 let account = "1234";
 let player = new Player(account);
 
+
+// Function to pause execution for a given duration
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function main() {
     let accountInfo = new LeHexBN(query(account).pkx).toU64Array();
     console.log("account info:", accountInfo);
@@ -19,20 +25,25 @@ async function main() {
     await player.runCommandAndCheckState(CREATE_PLAYER);
 
     console.log("Start run SHAKE_FEET...");
-    await player.runCommandAndCheckState(SHAKE_FEET);
+    let progress = await player.runCommandAndCheckState(SHAKE_FEET);
+    await delay(15000); // Wait for 15 seconds/3 ticks
 
     console.log("Start run JUMP...");
-    await player.runCommandAndCheckState(JUMP);
+    progress = await player.runCommandAndCheckState(JUMP);
+    await delay(15000); // Wait for 15 seconds/3 ticks
 
     console.log("Start run SHAKE_HEADS...");
-    await player.runCommandAndCheckState(SHAKE_HEADS);
+    progress = await player.runCommandAndCheckState(SHAKE_HEADS);
+    await delay(15000); // Wait for 15 seconds/3 ticks
 
     console.log("Start run POST_COMMENTS...");
-    await player.runCommandAndCheckState(POST_COMMENTS);
+    progress = await player.runCommandAndCheckState(POST_COMMENTS);
+    await delay(15000); // Wait for 15 seconds/3 ticks
 
     // Run extra 16 actions to test lottery
     for(let i = 0; i < 16; i++) {
-      await player.runCommandAndCheckState(JUMP);
+      progress = await player.runCommandAndCheckState(JUMP);
+      await delay(15000); // Wait for 15 seconds/3 ticks
     }
     console.log("Run extra actions done!");
     console.log("Start run LOTTERY...");

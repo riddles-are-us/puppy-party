@@ -5,7 +5,7 @@ use crate::Player;
 use zkwasm_rest_abi::MERKLE_MAP;
 use serde::{Serialize};
 use crate::player::PlayerData;
-use crate::config::{get_initial_delta, get_progress_increments};
+use crate::config::{get_action_duration, get_action_reward};
 
 #[derive(Serialize, Clone)]
 pub struct QueryPlayerState {
@@ -25,7 +25,7 @@ impl QueryPlayerState {
 #[derive(Serialize)]
 pub struct GlobalState {
     player_list: Vec<QueryPlayerState>,
-    counter: u64
+    pub counter: u64
 }
 
 #[derive(Serialize)]
@@ -163,13 +163,6 @@ impl Transaction {
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
-                // Increase progress by action_reward when player run command
-                let progress_increments = get_progress_increments();
-                player.check_and_inc_nonce(self.nonce);
-
-                // Reset delta as long as player run command
-                let initial_delta = get_initial_delta();
-
                 // Check for Lottery action
                 if action == LOTTERY {
                     // This is the selected player; allow them to open the blind box
@@ -182,6 +175,7 @@ impl Transaction {
                             player.data.progress = 0;
                             player.data.last_lottery_timestamp = 0;
                             player.data.last_action_timestamp = 0;
+                            player.check_and_inc_nonce(self.nonce);
                             player.store();
                             0
                         } else {
@@ -195,24 +189,32 @@ impl Transaction {
                         PLAYER_LOTTERY_PROGRESS_NOT_FULL
                     }
                 } else {
+                    let action_duration = get_action_duration();
+                    let action_reward = get_action_reward();
+
                     if player.data.last_action_timestamp != 0
-                        && state.counter < player.data.last_action_timestamp + 3 { // change 3 to config
+                        && state.counter < player.data.last_action_timestamp + action_duration {
                         PLAYER_ACTION_NOT_FINISHED
                     } else {
                         player.data.action = action;
                         player.data.last_action_timestamp = state.counter;
-                        player.data.progress += progress_increments.action_reward;
+                        player.data.progress += action_reward;
                         if player.data.progress > 1000 {
                             player.data.progress = 1000;
                             player.data.last_lottery_timestamp = state.counter;
                         }
                         GlobalState::update_player_list(player, state);
+                        player.check_and_inc_nonce(self.nonce);
                         player.store();
                         0
                     }
                 }
             }
         }
+    }
+
+    pub fn tick(&self) {
+        GLOBAL_STATE.0.borrow_mut().counter += 1;
     }
 
     pub fn process(&self, pkey: &[u64; 4], rand: &[u64; 4]) -> u32 {
@@ -223,7 +225,10 @@ impl Transaction {
             SHAKE_HEADS => self.action(pkey, SHAKE_HEADS, rand),
             POST_COMMENTS => self.action(pkey, POST_COMMENTS, rand),
             LOTTERY => self.action(pkey, LOTTERY, rand),
-            _ => 0
+            _ => {
+                self.tick();
+                0
+            }
         };
         let root = unsafe { &mut MERKLE_MAP.merkle.root };
         zkwasm_rust_sdk::dbg!("root after process {:?}\n", root);

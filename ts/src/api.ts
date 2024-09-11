@@ -31,11 +31,9 @@ export class Player {
 
   async runCommand(command: bigint, nonce: bigint) {
     try {
-      console.log("command", command, "nonce", nonce);
       let processStamp = await rpc.sendTransaction([createCommand(command, nonce), 0n, 0n, 0n], this.processingKey);
       console.log("command processed at:", processStamp);
     } catch(e) {
-      console.log(e)
       let reason = "";
       if (e instanceof Error) {
         reason = e.message;
@@ -51,9 +49,7 @@ export class Player {
       let nonce_after_command = data.player.nonce;
       let balance_after_command = data.player.data.balance;
       let action_after_command = data.player.data.action;
-      if(action == LOTTERY) {
-        console.log("balance_after_command", balance_after_command, data);
-      }
+
       if(nonce == BigInt(nonce_after_command) && action == BigInt(action_after_command) && balance == BigInt(balance_after_command)) {
           console.log("command works");
       } else {
@@ -72,7 +68,7 @@ export class Player {
       let data = await this.getState();
       let nonce_before_command = BigInt(data.player.nonce);
       await this.runCommand(command, BigInt(nonce_before_command));
-      
+
       let balance = 0n;
       // Run lottery once on test.ts, so balance is 10, action become SWAY
       if(command == LOTTERY) {
