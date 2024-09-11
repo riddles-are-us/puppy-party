@@ -199,9 +199,10 @@ impl Transaction {
                         player.data.action = action;
                         player.data.last_action_timestamp = state.counter;
                         player.data.progress += action_reward;
-                        if player.data.progress > 1000 {
-                            player.data.progress = 1000;
+                        if player.data.progress == 1000 {
                             player.data.last_lottery_timestamp = state.counter;
+                        } else if player.data.progress > 1000 {
+                            player.data.progress = 1000;
                         }
                         GlobalState::update_player_list(player, state);
                         player.check_and_inc_nonce(self.nonce);
