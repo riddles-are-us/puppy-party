@@ -152,6 +152,12 @@ impl Transaction {
             None => {
                 let player = Player::new(pkey);
                 player.store();
+                let mut state = GLOBAL_STATE.0.borrow_mut();
+
+                state.player_list.push(QueryPlayerState {
+                    pid: format!("{}-{}", player.player_id[0], player.player_id[1]),
+                    data: player.data.clone()
+                });
                 0
             }
         }
