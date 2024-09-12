@@ -16,7 +16,7 @@ lazy_static::lazy_static! {
         actions: ["shakeFeet", "shakeHead", "jump", "postComments", "lottery"],
         name: ["Bob", "Frank", "Cindy", "Alice", "John"],
         action_reward: 50,
-        action_duration: 3
+        action_duration: 2
     };
 
 
