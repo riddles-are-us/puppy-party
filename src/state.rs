@@ -108,6 +108,7 @@ const JUMP: u64 = 3;
 const SHAKE_HEADS: u64 = 4;
 const POST_COMMENTS: u64 = 5;
 const LOTTERY: u64 = 6;
+const CANCELL_LOTTERY: u64 = 7;
 
 const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
 const ERROR_PLAYER_NOT_EXIST:u32 = 2;
@@ -183,6 +184,7 @@ impl Transaction {
                             player.data.last_action_timestamp = 0;
                             player.check_and_inc_nonce(self.nonce);
                             player.store();
+                            GlobalState::update_player_list(player, state);
                             0
                         } else {
                             player.data.action = SWAY;
@@ -194,7 +196,13 @@ impl Transaction {
                     } else {
                         PLAYER_LOTTERY_PROGRESS_NOT_FULL
                     }
-                } else {
+                } else if action == CANCELL_LOTTERY {
+                    player.data.action = SWAY;
+                    player.data.progress = 0;
+                    player.data.last_lottery_timestamp = 0;
+                    player.store();
+                    0
+                }else {
                     let action_duration = get_action_duration();
                     let action_reward = get_action_reward();
 
@@ -232,6 +240,7 @@ impl Transaction {
             SHAKE_HEADS => self.action(pkey, SHAKE_HEADS, rand),
             POST_COMMENTS => self.action(pkey, POST_COMMENTS, rand),
             LOTTERY => self.action(pkey, LOTTERY, rand),
+            CANCELL_LOTTERY => self.action(pkey, CANCELL_LOTTERY, rand),
             _ => {
                 self.tick();
                 0
