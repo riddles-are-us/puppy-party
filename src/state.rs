@@ -168,7 +168,7 @@ impl GlobalState {
     }
 }
 
-pub struct SafeState (pub RefCell<GlobalState>);
+pub struct SafeState (RefCell<GlobalState>);
 unsafe impl Sync for SafeState {}
 
 lazy_static::lazy_static! {
