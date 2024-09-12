@@ -184,7 +184,6 @@ impl Transaction {
                             player.data.last_action_timestamp = 0;
                             player.check_and_inc_nonce(self.nonce);
                             player.store();
-                            GlobalState::update_player_list(player, state);
                             0
                         } else {
                             player.data.action = SWAY;
