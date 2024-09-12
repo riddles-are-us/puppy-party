@@ -1,11 +1,12 @@
-use crate::settlement::SettleMentInfo;
+use crate::settlement::SettlementInfo;
 use std::cell::{RefCell, RefMut};
 use crate::player::{PuppyPlayer, Owner};
 use crate::Player;
-use zkwasm_rest_abi::MERKLE_MAP;
+use zkwasm_rest_abi::{ MERKLE_MAP, WithdrawInfo };
 use serde::{Serialize};
 use crate::player::PlayerData;
 use crate::config::{get_action_duration, get_action_reward};
+use zkwasm_rust_sdk::require;
 
 #[derive(Serialize, Clone)]
 pub struct QueryPlayerState {
@@ -13,11 +14,54 @@ pub struct QueryPlayerState {
     data: PlayerData,
 }
 
+fn parse_player_id(pid: &str) -> [u64; 2] {
+    let parts: Vec<&str> = pid.split('-').collect();
+    let id0 = parts[0].parse::<u64>().unwrap();
+    let id1 = parts[1].parse::<u64>().unwrap();
+    [id0, id1]
+}
+
 impl QueryPlayerState {
     fn from(p: &PuppyPlayer) -> Self {
         QueryPlayerState {
             pid: format!("{}-{}", p.player_id[0], p.player_id[1]),
             data: p.data.clone()
+        }
+    }
+
+    fn compact(&self, buf: &mut Vec<u64>) {
+        let pid = parse_player_id(&self.pid);
+        buf.push(pid[0]);
+        buf.push(pid[1]);
+        buf.push(self.data.action);
+        buf.push(self.data.last_lottery_timestamp);
+        buf.push(self.data.last_action_timestamp);
+        buf.push(self.data.balance);
+        buf.push(self.data.progress);
+        zkwasm_rust_sdk::dbg!("compact {:?}", buf);
+    }
+
+    fn fetch(buf: &mut Vec<u64>) -> QueryPlayerState {
+        zkwasm_rust_sdk::dbg!("fetch {:?}", buf);
+        let progress = buf.pop().unwrap();
+        let balance = buf.pop().unwrap();
+        let last_action_timestamp = buf.pop().unwrap();
+        let last_lottery_timestamp = buf.pop().unwrap();
+        let action = buf.pop().unwrap();
+        let mut pid = [
+            buf.pop().unwrap(),
+            buf.pop().unwrap()
+        ];
+        pid.reverse();
+        QueryPlayerState {
+            pid: format!("{}-{}", pid[0], pid[1]),
+            data: PlayerData {
+                action,
+                last_lottery_timestamp,
+                last_action_timestamp,
+                balance,
+                progress
+            }
         }
     }
 }
@@ -41,8 +85,6 @@ impl GlobalState {
             player_list: vec![],
             counter: 0,
         }
-    }
-    pub fn initialize() {
     }
 
     pub fn update_player_list(player: &mut PuppyPlayer, mut global_state: RefMut<'_, GlobalState>) {
@@ -83,18 +125,50 @@ impl GlobalState {
     }
 
     pub fn flush_settlement() -> Vec<u8> {
-        SettleMentInfo::flush_settlement()
+        SettlementInfo::flush_settlement()
     }
 
     pub fn rand_seed() -> u64 {
         0
     }
 
+    pub fn store_into_kvpair(&self) {
+        let n = self.player_list.len();
+        let mut v = Vec::with_capacity(n * 7 + 1);
+        for e in self.player_list.iter() {
+            e.compact(&mut v);
+        }
+        v.push(self.counter);
+        let kvpair = unsafe { &mut MERKLE_MAP };
+        kvpair.set(&[0, 0, 0, 0], v.as_slice());
+        let root = kvpair.merkle.root.clone();
+        zkwasm_rust_sdk::dbg!("root after store: {:?}\n", root);
+    }
+
+    pub fn fetch(&mut self) {
+        let kvpair = unsafe { &mut MERKLE_MAP };
+        let mut data = kvpair.get(&[0, 0, 0, 0]);
+        if !data.is_empty() {
+            let counter = data.pop().unwrap();
+            let mut player_list = vec![];
+            while !data.is_empty() {
+                player_list.push(QueryPlayerState::fetch(&mut data))
+            }
+            self.counter = counter;
+            self.player_list = player_list;
+        }
+    }
+
     pub fn store() {
+        GLOBAL_STATE.0.borrow_mut().store_into_kvpair();
+    }
+
+    pub fn initialize() {
+        GLOBAL_STATE.0.borrow_mut().fetch();
     }
 }
 
-pub struct SafeState (RefCell<GlobalState>);
+pub struct SafeState (pub RefCell<GlobalState>);
 unsafe impl Sync for SafeState {}
 
 lazy_static::lazy_static! {
@@ -109,6 +183,7 @@ const SHAKE_HEADS: u64 = 4;
 const POST_COMMENTS: u64 = 5;
 const LOTTERY: u64 = 6;
 const CANCELL_LOTTERY: u64 = 7;
+const WITHDRAW: u64 = 8;
 
 const ERROR_PLAYER_ALREADY_EXIST:u32 = 1;
 const ERROR_PLAYER_NOT_EXIST:u32 = 2;
@@ -119,8 +194,9 @@ const PLAYER_LOTTERY_EXPIRED: u32 = 6;
 const PLAYER_LOTTERY_PROGRESS_NOT_FULL: u32 = 7;
 
 pub struct Transaction {
-    pub command: u64,
-    pub nonce: u64
+    command: u64,
+    nonce: u64,
+    data: Vec<u64>
 }
 
 impl Transaction {
@@ -140,9 +216,15 @@ impl Transaction {
     pub fn decode(params: [u64; 4]) -> Self {
         let command = params[0] & 0xff;
         let nonce = params[0] >> 16;
+        let mut data = vec![];
+        if command == WITHDRAW {
+            data = vec![params[1], params[2], params[3]] // address of withdraw(Note:amount in params[1])
+        }
+
         Transaction {
             command,
-            nonce
+            nonce,
+            data
         }
     }
 
@@ -201,7 +283,28 @@ impl Transaction {
                     player.data.last_lottery_timestamp = 0;
                     player.store();
                     0
-                }else {
+                } else if action == WITHDRAW {
+                    let mut player = PuppyPlayer::get(pkey);
+                    match player.as_mut() {
+                        None => ERROR_PLAYER_NOT_EXIST,
+                        Some(player) => {
+                            player.check_and_inc_nonce(self.nonce);
+                            let balance = player.data.balance;
+                            let amount = self.data[0] & 0xffffffff;
+                            unsafe { require(balance >= amount) };
+                            player.data.balance -= amount;
+                            zkwasm_rust_sdk::dbg!("balance: {}, amount is {:?}", balance, amount);
+                            let withdrawinfo = WithdrawInfo::new(&[
+                                self.data[0],
+                                self.data[1],
+                                self.data[2]
+                            ]);
+                            SettlementInfo::append_settlement(withdrawinfo);
+                            player.store();
+                            0
+                        }
+                    }
+                } else {
                     let action_duration = get_action_duration();
                     let action_reward = get_action_reward();
 
@@ -240,6 +343,7 @@ impl Transaction {
             POST_COMMENTS => self.action(pkey, POST_COMMENTS, rand),
             LOTTERY => self.action(pkey, LOTTERY, rand),
             CANCELL_LOTTERY => self.action(pkey, CANCELL_LOTTERY, rand),
+            WITHDRAW => self.action(pkey, WITHDRAW, rand),
             _ => {
                 self.tick();
                 0

@@ -1,8 +1,18 @@
 import { ZKWasmAppRpc } from "zkwasm-ts-server";
+import BN from "bn.js";
 
 const SWAY = 0n;
 const CREATE_PLAYER = 1n;
 const LOTTERY = 6n;
+const WITHDRAW = 8n;
+
+// for withdraw
+const address = "c177d1d314C8FFe1Ea93Ca1e147ea3BE0ee3E470";
+const amount = 1n;
+
+function bytesToHex(bytes: Array<number>): string  {
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 function createCommand(command: bigint, nonce: bigint) {
   return (nonce << 16n) + command;
@@ -27,6 +37,41 @@ export class Player {
     const data = JSON.parse(parsedState.data);
 
     return data;
+  }
+
+  async withdrawRewards(address: string, amount: bigint, nonce: bigint) {
+    let addressBN = new BN(address, 16);
+    let addressBE = addressBN.toArray("be", 20); // 20 bytes = 160 bits and split into 4, 8, 8
+    console.log("address is", address);
+    console.log("address big endian is", addressBE);
+    let firstLimb = BigInt('0x' + bytesToHex(addressBE.slice(0,4).reverse()));
+    let sndLimb = BigInt('0x' + bytesToHex(addressBE.slice(4,12).reverse()));
+    let thirdLimb = BigInt('0x' + bytesToHex(addressBE.slice(12, 20).reverse()));
+
+    /*
+    (32 bit amount | 32 bit highbit of address)
+    (64 bit mid bit of address (be))
+    (64 bit tail bit of address (be))
+    */
+
+    console.log("first is", firstLimb);
+    console.log("snd is", sndLimb);
+    console.log("third is", thirdLimb);
+
+    try {
+      let processStamp = await rpc.sendTransaction([
+        createCommand(WITHDRAW, nonce),
+        (firstLimb << 32n) + amount,
+        sndLimb,
+        thirdLimb
+      ], this.processingKey);
+      console.log("withdraw rewards processed at:", processStamp);
+    } catch(e) {
+      if (e instanceof Error) {
+        console.log(e.message);
+      }
+      console.log("collect reward error at address:", address);
+    }
   }
 
   async runCommand(command: bigint, nonce: bigint) {
@@ -64,12 +109,18 @@ export class Player {
     if(command == CREATE_PLAYER) {
       await this.runCommand(command, 0n);
       await this.checkState(0n, 0n, 0n);
+    } else if(command == WITHDRAW){
+      let data = await this.getState();
+      let nonce_before_command = BigInt(data.player.nonce);
+      let balance = 9n // previous balance(10n) - amount(1n)
+      await this.withdrawRewards(address, amount, nonce_before_command);
+      await this.checkState(nonce_before_command + 1n, SWAY, balance);
     } else {
       let data = await this.getState();
       let nonce_before_command = BigInt(data.player.nonce);
       await this.runCommand(command, BigInt(nonce_before_command));
-
       let balance = 0n;
+
       // Run lottery once on test.ts, so balance is 10, action become SWAY
       if(command == LOTTERY) {
         balance = 10n;
