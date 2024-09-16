@@ -272,7 +272,7 @@ impl Transaction {
                     // This is the selected player; allow them to open the blind box
                     zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
                     if player.data.progress == 1000 {
-                        if player.data.last_lottery_timestamp + 2 > state.counter {
+                        if player.data.last_lottery_timestamp + 10 > state.counter {
                             // Update player's state to reflect that the lottery is complete
                             player.data.balance += 10; // change 10 to random reward
                             player.data.action = SWAY;
