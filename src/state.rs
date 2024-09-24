@@ -1,5 +1,5 @@
 use crate::settlement::SettlementInfo;
-use std::cell::{RefCell, RefMut};
+use std::cell::{RefCell};
 use crate::player::{PuppyPlayer, Owner};
 use crate::Player;
 use zkwasm_rest_abi::{ MERKLE_MAP, WithdrawInfo };
@@ -95,8 +95,9 @@ impl GlobalState {
         }
     }
 
-    pub fn update_player_list(player: &mut PuppyPlayer, mut global_state: RefMut<'_, GlobalState>) {
+    pub fn update_player_list(player: &mut PuppyPlayer) {
         let player_data = QueryPlayerState::from(player);
+        let mut global_state = GLOBAL_STATE.0.borrow_mut();
         let mut exist = false;
 
         for p in global_state.player_list.iter_mut() {
@@ -265,7 +266,10 @@ impl Transaction {
 
     pub fn action(&self, pkey: &[u64; 4], action: u64, rand: &[u64; 4]) -> u32 {
         let mut player = PuppyPlayer::get(pkey);
-        let state = GLOBAL_STATE.0.borrow_mut();
+        let counter = {
+            let state = GLOBAL_STATE.0.borrow();
+            state.counter
+        };
         match player.as_mut() {
             None => ERROR_PLAYER_NOT_EXIST,
             Some(player) => {
@@ -274,7 +278,7 @@ impl Transaction {
                     // This is the selected player; allow them to open the blind box
                     zkwasm_rust_sdk::dbg!("Player {:?} is opening the blind box", pkey);
                     if player.data.progress == 1000 {
-                        if player.data.last_lottery_timestamp + 10 > state.counter {
+                        if player.data.last_lottery_timestamp + 10 > counter {
                             // Update player's state to reflect that the lottery is complete
                             player.data.balance += 10; // change 10 to random reward
                             player.data.action = SWAY;
@@ -327,18 +331,18 @@ impl Transaction {
                     let action_reward = get_action_reward();
 
                     if player.data.last_action_timestamp != 0
-                        && state.counter < player.data.last_action_timestamp + action_duration {
+                        && counter < player.data.last_action_timestamp + action_duration {
                         PLAYER_ACTION_NOT_FINISHED
                     } else {
                         player.data.action = action;
-                        player.data.last_action_timestamp = state.counter;
+                        player.data.last_action_timestamp = counter;
                         player.data.progress += action_reward;
                         if player.data.progress == 1000 {
-                            player.data.last_lottery_timestamp = state.counter;
+                            player.data.last_lottery_timestamp = counter;
                         } else if player.data.progress > 1000 {
                             player.data.progress = 1000;
                         }
-                        GlobalState::update_player_list(player, state);
+                        GlobalState::update_player_list(player);
                         player.check_and_inc_nonce(self.nonce);
                         player.store();
                         0
