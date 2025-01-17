@@ -23,8 +23,16 @@ clean:
 	rm -rf pkg
 	rm -rf ./src/admin.pubkey
 
-run:
+run-zkwasm:
 	node ./ts/src/service.js
+
+run-express:
+	node ./ts/src/express_server.js
+
+run:
+	@echo "Starting both servers..."
+	@make -j2 run-zkwasm run-express
+
 
 deploy:
 	docker build --file ./deploy/service.docker -t zkwasm-server . --network=host
