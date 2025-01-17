@@ -4,3 +4,4 @@ target
 **/*.js.map
 **/*.js
 uploads/
+.env
