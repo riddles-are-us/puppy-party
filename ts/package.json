@@ -1,10 +1,12 @@
 {
   "type": "module",
   "dependencies": {
+    "@sanity/client": "^6.25.0",
     "@types/bn.js": "^5.1.5",
     "@types/node": "^20.14.2",
     "@types/sha256": "^0.2.2",
     "delphinus-curves": "github:DelphinusLab/delphinus-curves#xgao",
+    "multer": "^1.4.5-lts.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
     "zkwasm-minirollup-rpc": "github:DelphinusLab/zkWasm-minirollup-rpc#52bd36c3d6f31c152175016a1d5e3a910738a1ae",
@@ -13,5 +15,8 @@
   },
   "scripts": {
     "build": "npx tsc"
+  },
+  "devDependencies": {
+    "@types/multer": "^1.4.12"
   }
 }
