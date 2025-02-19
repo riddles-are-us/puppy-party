@@ -1,15 +1,26 @@
 import express, { Express } from "express";
+import { LeHexBN, query, ZKWasmAppRpc } from "zkwasm-ts-server";
 import cors from "cors";
 import multer, { Multer } from "multer";
 import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { createClient, SanityClient } from "@sanity/client";
+import { Player } from "./api.js";
+
+const INSTALL_PLAYER = 1n;
+const INSTALL_MEME = 7n;
+const WITHDRAW = 8n;
+const DEPOSIT = 9n;
+let account = "1234";
+const rpc: any = new ZKWasmAppRpc("http://127.0.0.1:3000");
+let player = new Player(account, rpc, DEPOSIT, WITHDRAW);
 
 export class SanityUploadService {
   sanityClient: SanityClient;
   multer: Multer;
   registerAPICallback: (app: Express) => void;
+  nonce: bigint;
 
   constructor(uploadDir: string) {
     if (!fs.existsSync(uploadDir)) {
@@ -37,6 +48,13 @@ export class SanityUploadService {
     this.registerAPICallback = (app: Express) => {
       this.registerAPI(app);
     };
+
+    this.nonce = 0n;
+  }
+
+  async init() {
+    await player.runCommand(INSTALL_PLAYER, 0n, []);
+    this.nonce = await player.getNonce();
   }
 
   private registerAPI(app: Express) {
@@ -95,6 +113,7 @@ export class SanityUploadService {
           };
 
           const createdDocument = await this.sanityClient.create(newDocument);
+          player.runCommand(INSTALL_MEME, this.nonce, []);
 
           fs.unlinkSync(avatarFile.path);
           fs.unlinkSync(spriteSheetFile.path);

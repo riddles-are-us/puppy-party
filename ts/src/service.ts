@@ -54,6 +54,7 @@ function extra (app: Express) {
 
 
 service.serve();
+await sanityUploadService.init();
 
 const EVENT_POSITION_UPDATE = 1;
 const EVENT_MEME_UPDATE = 2;
