@@ -7,13 +7,13 @@ import { get_server_admin_key } from "zkwasm-ts-server/src/config.js";
 import { Express } from "express";
 //import {clearTxFromCommit, CommitModel, getTxFromCommit, insertTxIntoCommit} from "./commits.js";
 import {merkleRootToBeHexString} from "zkwasm-ts-server/src/lib.js";
-import { SanityUploadService } from "./sanity_upload_service.js";
+import { SanityService } from "./sanity_service.js";
 
 const uncommittedTxs: TxWitness[] = [];
 
 
 const uploadDir = "./uploads";
-const sanityUploadService = new SanityUploadService(uploadDir);
+const sanityService = new SanityService(uploadDir);
 const service = new Service(eventCallback, batchedCallback, extra, bootstrap);
 await service.initialize();
 
@@ -49,12 +49,13 @@ function extra (app: Express) {
 			data: jdoc,
 		});
 	});
-	sanityUploadService.registerAPICallback(app);
+	sanityService.registerAPICallback(app);
 }
 
 
 service.serve();
-await sanityUploadService.init();
+await sanityService.init();
+await sanityService.setMemeList();
 
 const EVENT_POSITION_UPDATE = 1;
 const EVENT_MEME_UPDATE = 2;

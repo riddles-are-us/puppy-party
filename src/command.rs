@@ -18,7 +18,7 @@ pub enum Command {
     Deposit(Deposit),
     // standard player install and timer
     InstallPlayer,
-    InstallMeme,
+    InstallMeme(u64),
     Tick,
 }
 

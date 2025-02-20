@@ -44,15 +44,15 @@ async function main() {
 
 
     nonce = await player.getNonce();
-    await player.runCommand(INSTALL_MEME, nonce, []);
+    await player.runCommand(INSTALL_MEME, nonce, [1n]);
 
 
     nonce = await player.getNonce();
-    await player.runCommand(INSTALL_MEME, nonce, []);
+    await player.runCommand(INSTALL_MEME, nonce, [2n]);
 
 
     nonce = await player.getNonce();
-    await player.runCommand(INSTALL_MEME, nonce, []);
+    await player.runCommand(INSTALL_MEME, nonce, [3n]);
 
     nonce = await player.getNonce();
     await player.runCommand(STAKE, nonce, [1n, 1n]);

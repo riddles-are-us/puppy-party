@@ -20,7 +20,6 @@ use zkwasm_rest_convention::{clear_events, IndexedObject};
 
 #[derive(Serialize)]
 pub struct GlobalState {
-    pub total: u64,
     pub counter: u64,
     pub txsize: u64,
     pub airdrop: u64,
@@ -28,7 +27,6 @@ pub struct GlobalState {
 
 #[derive(Serialize)]
 pub struct QueryState {
-    total: u64,
     counter: u64,
     airdrop: u64,
 }
@@ -51,7 +49,6 @@ const WITHDRAW_LOTTERY: u64 = 10;
 impl GlobalState {
     pub fn new() -> Self {
         GlobalState {
-            total: 0,
             counter: 0,
             txsize: 0,
             airdrop: 10000000
@@ -59,10 +56,9 @@ impl GlobalState {
     }
 
     pub fn snapshot() -> String {
-        let total = GLOBAL_STATE.0.borrow().total;
         let counter = GLOBAL_STATE.0.borrow().counter;
         let airdrop = GLOBAL_STATE.0.borrow().airdrop;
-        serde_json::to_string(&QueryState { counter, total, airdrop }).unwrap()
+        serde_json::to_string(&QueryState { counter, airdrop }).unwrap()
     }
 
     pub fn get_state(pid: Vec<u64>) -> String {
@@ -93,7 +89,6 @@ impl GlobalState {
         let mut v = vec![];
         v.push(self.counter);
         v.push(self.airdrop);
-        v.push(self.total);
         let kvpair = unsafe { &mut MERKLE_MAP };
         kvpair.set(&[0, 0, 0, 0], v.as_slice());
     }
@@ -105,10 +100,8 @@ impl GlobalState {
             let mut u64data = data.iter_mut();
             let counter = *u64data.next().unwrap();
             let airdrop = *u64data.next().unwrap();
-            let total = *u64data.next().unwrap();
             self.counter = counter;
             self.airdrop = airdrop;
-            self.total = total;
         }
     }
 
@@ -160,7 +153,7 @@ impl Transaction {
         } else if command == INSTALL_PLAYER {
             Command::InstallPlayer
         } else if command == INSTALL_MEME {
-            Command::InstallMeme
+            Command::InstallMeme (params[1] as u64)
         } else  if command == LOTTERY {
             Command::Activity (Activity::Lottery)
         } else if command == VOTE {
@@ -200,12 +193,10 @@ impl Transaction {
         }
     }
 
-    pub fn create_meme(&self) -> Result<(), u32> {
-        let mut global = GLOBAL_STATE.0.borrow_mut();
-        let meme = MemeInfo::new_object(MemeInfo::default(), global.total);
+    pub fn create_meme(&self, id: u64) -> Result<(), u32> {
+        let meme = MemeInfo::new_object(MemeInfo::default(), id);
         meme.store();
-        MemeInfo::emit_event(global.total, &meme.data);
-        global.total += 1;
+        MemeInfo::emit_event(id, &meme.data);
         Ok(())
     }
 
@@ -229,7 +220,7 @@ impl Transaction {
             },
             Command::InstallPlayer => self.create_player(pkey)
                 .map_or_else(|e| e, |_| 0),
-            Command::InstallMeme=> self.create_meme()
+            Command::InstallMeme(id)=> self.create_meme(*id)
                 .map_or_else(|e| e, |_| 0),
             Command::Withdraw(cmd) => cmd.handle(&pid, self.nonce, rand, counter)
                 .map_or_else(|e| e, |_| 0),

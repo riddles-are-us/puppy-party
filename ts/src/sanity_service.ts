@@ -7,6 +7,8 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { createClient, SanityClient } from "@sanity/client";
 import { Player } from "./api.js";
+import sanityClient from "./sanityClient.js";
+import { IndexedObject, IndexedObjectModel, parseMemeInfo } from "./info.js";
 
 const INSTALL_PLAYER = 1n;
 const INSTALL_MEME = 7n;
@@ -16,11 +18,12 @@ let account = "1234";
 const rpc: any = new ZKWasmAppRpc("http://127.0.0.1:3000");
 let player = new Player(account, rpc, DEPOSIT, WITHDRAW);
 
-export class SanityUploadService {
+export class SanityService {
   sanityClient: SanityClient;
   multer: Multer;
   registerAPICallback: (app: Express) => void;
   nonce: bigint;
+  latestId: number;
 
   constructor(uploadDir: string) {
     if (!fs.existsSync(uploadDir)) {
@@ -50,11 +53,65 @@ export class SanityUploadService {
     };
 
     this.nonce = 0n;
+    this.latestId = 0;
   }
 
   async init() {
     await player.runCommand(INSTALL_PLAYER, 0n, []);
     this.nonce = await player.getNonce();
+    const query = `
+		*[_type == "meme"] | order(id desc)[0]{
+	id
+}`;
+
+    const latestMeme: any = await sanityClient
+      .fetch(query)
+      .catch((error: any) => {
+        console.error("Error fetching data:", error);
+      });
+    this.latestId = latestMeme.id;
+  }
+
+  async setMemeList() {
+    const query = `
+		*[_type == "season" && (isCurrentSeason == true || isPreviousSeason == true)] {
+			name,
+			seasonEndDate,
+			"isCurrentSeason": coalesce(isCurrentSeason, false),
+			"isPreviousSeason": coalesce(isPreviousSeason, false),
+			"memes": coalesce(memes[]->{
+				id,
+				name,
+				"avatar": avatar.asset->url,
+				"spriteSheet": spriteSheet.asset->url
+			}, [])
+		}`;
+
+    const seasonDatas: SeasonData[] = await sanityClient
+      .fetch(query)
+      .catch((error: any) => {
+        console.error("Error fetching data:", error);
+      });
+
+    const currentSeason = seasonDatas.find((season) => season.isCurrentSeason);
+    console.log("currentSeason", currentSeason);
+
+    const doc = await IndexedObjectModel.find();
+    const idSet = new Set(
+      doc.map((d) => {
+        const jdoc = IndexedObject.fromMongooseDoc(d);
+        return parseMemeInfo(jdoc).id;
+      })
+    );
+    console.log("idSet", idSet);
+
+    if (currentSeason) {
+      currentSeason.memes.forEach((meme) => {
+        if (!idSet.has(meme.id)) {
+          player.runCommand(INSTALL_MEME, this.nonce, [BigInt(meme.id)]);
+        }
+      });
+    }
   }
 
   private registerAPI(app: Express) {
@@ -95,8 +152,10 @@ export class SanityUploadService {
             }
           );
 
+          const id = ++this.latestId;
           const newDocument = {
             _type: "meme",
+            id,
             name: name,
             avatar: {
               _type: "image",
@@ -113,7 +172,7 @@ export class SanityUploadService {
           };
 
           const createdDocument = await this.sanityClient.create(newDocument);
-          player.runCommand(INSTALL_MEME, this.nonce, []);
+          await player.runCommand(INSTALL_MEME, this.nonce, [BigInt(id)]);
 
           fs.unlinkSync(avatarFile.path);
           fs.unlinkSync(spriteSheetFile.path);
@@ -128,4 +187,19 @@ export class SanityUploadService {
       }
     );
   }
+}
+export interface SeasonData {
+  name: string;
+  seasonEndDate: string;
+  isCurrentSeason: boolean;
+  isPreviousSeason: boolean;
+  memes: MemeData[];
+}
+
+export interface MemeData {
+  id: number;
+  name: string;
+  avatar: string;
+  spriteSheet: string;
+  rank: number;
 }
