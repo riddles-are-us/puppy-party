@@ -7,7 +7,6 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { createClient, SanityClient } from "@sanity/client";
 import { Player } from "./api.js";
-import sanityClient from "./sanityClient.js";
 import { IndexedObject, IndexedObjectModel, parseMemeInfo } from "./info.js";
 
 const INSTALL_PLAYER = 1n;
@@ -61,10 +60,10 @@ export class SanityService {
     this.nonce = await player.getNonce();
     const query = `
 		*[_type == "meme"] | order(id desc)[0]{
-	id
-}`;
+			id
+		}`;
 
-    const latestMeme: any = await sanityClient
+    const latestMeme: any = await this.sanityClient
       .fetch(query)
       .catch((error: any) => {
         console.error("Error fetching data:", error);
@@ -87,14 +86,13 @@ export class SanityService {
 			}, [])
 		}`;
 
-    const seasonDatas: SeasonData[] = await sanityClient
+    const seasonDatas: SeasonData[] = await this.sanityClient
       .fetch(query)
       .catch((error: any) => {
         console.error("Error fetching data:", error);
       });
 
     const currentSeason = seasonDatas.find((season) => season.isCurrentSeason);
-    console.log("currentSeason", currentSeason);
 
     const doc = await IndexedObjectModel.find();
     const idSet = new Set(
@@ -103,7 +101,6 @@ export class SanityService {
         return parseMemeInfo(jdoc).id;
       })
     );
-    console.log("idSet", idSet);
 
     if (currentSeason) {
       currentSeason.memes.forEach((meme) => {
