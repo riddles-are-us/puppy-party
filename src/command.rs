@@ -121,20 +121,22 @@ impl CommandHandler for Activity {
                 match self {
                     Activity::Stake(sz, amount) => {
                         player.check_and_inc_nonce(nonce);
-                        let (pos, meme) = player.stake(*sz as u64, *amount as u32, counter)?;
+                        let meme_id = *sz as u64;
+                        let (pos, meme) = player.stake(meme_id, *amount as u32, counter)?;
                         player.store();
                         meme.store();
                         pos.store();
-                        StakeInfo::emit_event(&pid, *sz as u64, &pos.data);
-                        MemeInfo::emit_event(meme.data.id, &meme.data);
+                        StakeInfo::emit_event(&pid, meme_id, &pos.data);
+                        MemeInfo::emit_event(meme_id, &meme.data);
                         Ok(())
                     },
                     Activity::Collect(sz) => {
                         player.check_and_inc_nonce(nonce);
-                        let pos = player.collect(*sz as u64, counter)?;
+                        let meme_id = *sz as u64;
+                        let pos = player.collect(meme_id, counter)?;
                         player.store();
                         pos.store();
-                        StakeInfo::emit_event(&pid, *sz as u64, &pos.data);
+                        StakeInfo::emit_event(&pid, meme_id, &pos.data);
                         Ok(())
                     },
                     Activity::Vote(sz) => {
@@ -144,13 +146,15 @@ impl CommandHandler for Activity {
                         player.data.cost_ticket(1)?;
                         player.data.increase_progress(counter,action_reward);
                         player.check_and_inc_nonce(nonce);
-                        let meme = MemeInfo::get_object(*sz as u64);
+                        let meme_id = *sz as u64;
+                        let meme = MemeInfo::get_object(meme_id);
                         match meme {
                             None => Err(INVALID_MEME_INDEX),
                             Some (mut m) => {
                                 m.data.rank += 1;
                                 m.store();
                                 player.store();
+                                MemeInfo::emit_event(meme_id, &m.data);
                                 Ok(())
                             }
                         }
