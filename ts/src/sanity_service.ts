@@ -59,9 +59,9 @@ export class SanityService {
     await player.runCommand(INSTALL_PLAYER, 0n, []);
     this.nonce = await player.getNonce();
     const query = `
-		*[_type == "meme"] | order(id desc)[0]{
-			id
-		}`;
+    *[_type == "meme"] | order(id desc)[0]{
+      id
+    }`;
 
     const latestMeme: any = await this.sanityClient
       .fetch(query)
@@ -73,40 +73,42 @@ export class SanityService {
 
   async setMemeList() {
     const query = `
-		*[_type == "season" && (isCurrentSeason == true || isPreviousSeason == true)] {
-			name,
-			seasonEndDate,
-			"isCurrentSeason": coalesce(isCurrentSeason, false),
-			"isPreviousSeason": coalesce(isPreviousSeason, false),
-			"memes": coalesce(memes[]->{
-				id,
-				name,
-				"avatar": avatar.asset->url,
-				"spriteSheet": spriteSheet.asset->url
-			}, [])
-		}`;
+    *[_type == "season" && (isCurrentSeason == true || isPreviousSeason == true)] {
+      name,
+      seasonEndDate,
+      "isCurrentSeason": coalesce(isCurrentSeason, false),
+      "isPreviousSeason": coalesce(isPreviousSeason, false),
+      "memes": coalesce(memes[]->{
+        id,
+        name,
+        "avatar": avatar.asset->url,
+        "spriteSheet": spriteSheet.asset->url
+      }, [])
+    }`;
 
+    // download memes that need to be shown from Sanity
     const seasonDatas: SeasonData[] = await this.sanityClient
       .fetch(query)
       .catch((error: any) => {
         console.error("Error fetching data:", error);
       });
-
     const currentSeason = seasonDatas.find((season) => season.isCurrentSeason);
 
-    const doc = await IndexedObjectModel.find();
-    const idSet = new Set(
-      doc.map((d) => {
-        const jdoc = IndexedObject.fromMongooseDoc(d);
-        return parseMemeInfo(jdoc).id;
-      })
-    );
+    // load memes from MongoDB
+    // const doc = await IndexedObjectModel.find();
+    // const idSet = new Set(
+    //   doc.map((d) => {
+    //     const jdoc = IndexedObject.fromMongooseDoc(d);
+    //     return parseMemeInfo(jdoc).id;
+    //   })
+    // );
 
+    // install memes that are not in MongoDB
     if (currentSeason) {
       currentSeason.memes.forEach((meme) => {
-        if (!idSet.has(meme.id)) {
+        // if (!idSet.has(meme.id)) {
           player.runCommand(INSTALL_MEME, this.nonce, [BigInt(meme.id)]);
-        }
+        // }
       });
     }
   }
