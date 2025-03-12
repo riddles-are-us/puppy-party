@@ -1,6 +1,6 @@
 import { Service } from "zkwasm-ts-server";
 import {TxWitness} from "zkwasm-ts-server/src/prover";
-import {Event, EventModel} from "./event.js";
+import {Event, EventModel} from "zkwasm-ts-server";
 import { Position, IndexedObjectModel, IndexedObject, PositionModel, parseMemeInfo} from "./info.js";
 import { Player} from "./api.js";
 import { get_server_admin_key } from "zkwasm-ts-server/src/config.js";
