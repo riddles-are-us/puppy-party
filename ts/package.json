@@ -9,9 +9,10 @@
     "multer": "^1.4.5-lts.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
-    "zkwasm-minirollup-rpc": "github:DelphinusLab/zkWasm-minirollup-rpc#52bd36c3d6f31c152175016a1d5e3a910738a1ae",
-    "zkwasm-service-cli": "git+https://github.com/DelphinusLab/zkWasm-service-cli.git",
-    "zkwasm-ts-server": "https://gitpkg.vercel.app/DelphinusLab/zkwasm-mini-rollup/ts?release-v1#846520e02394e22f69ad3d082de69325eda0d3b5"
+    "zkwasm-minirollup-rpc": "github:DelphinusLab/zkWasm-minirollup-rpc",
+    "zkwasm-service-cli": "github:DelphinusLab/zkWasm-service-cli",
+    "zkwasm-service-helper": "github:DelphinusLab/zkWasm-service-helper",
+    "zkwasm-ts-server": "https://gitpkg.vercel.app/DelphinusLab/zkwasm-mini-rollup/ts?release-v1"
   },
   "scripts": {
     "build": "npx tsc"
