@@ -14,7 +14,7 @@ const uncommittedTxs: TxWitness[] = [];
 
 const uploadDir = "./uploads";
 const sanityService = new SanityService(uploadDir);
-const service = new Service(eventCallback, batchedCallback, extra, bootstrap);
+const service = new Service(eventCallback, batchedCallback, extra);
 await service.initialize();
 
 
@@ -53,7 +53,7 @@ function extra (app: Express) {
 }
 
 
-service.serve();
+await service.serve();
 await sanityService.init();
 await sanityService.setMemeList();
 
