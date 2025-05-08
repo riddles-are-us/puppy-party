@@ -12,7 +12,7 @@
     "zkwasm-minirollup-rpc": "github:DelphinusLab/zkWasm-minirollup-rpc",
     "zkwasm-service-cli": "github:DelphinusLab/zkWasm-service-cli",
     "zkwasm-service-helper": "github:DelphinusLab/zkWasm-service-helper",
-    "zkwasm-ts-server": "https://gitpkg.vercel.app/DelphinusLab/zkwasm-mini-rollup/ts?release-v1"
+    "zkwasm-ts-server": "https://gitpkg.vercel.app/DelphinusLab/zkwasm-mini-rollup/ts?main"
   },
   "scripts": {
     "build": "npx tsc"
