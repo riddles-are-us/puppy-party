@@ -5,7 +5,6 @@ use crate::settlement::SettlementInfo;
 use crate::Player;
 use serde::Serialize;
 use std::cell::RefCell;
-use zkwasm_rest_abi::StorageData;
 use zkwasm_rest_abi::MERKLE_MAP;
 use zkwasm_rust_sdk::require;
 use crate::command::Command;
@@ -234,11 +233,13 @@ impl Transaction {
                     .map_or_else(|e| e, |_| 0)
             },
         };
-        match self.command {
-            Command::Tick => (),
-            _ => {
-                self.inc_tx_number();
-                self.tick();
+        if e == 0 {
+            // if no error occurred
+            match self.command {
+                Command::Tick => (),
+                _ => {
+                    self.inc_tx_number();
+                }
             }
         }
         let txsize = GLOBAL_STATE.0.borrow_mut().txsize;
