@@ -1,6 +1,6 @@
 use std::slice::IterMut;
 use serde::Serialize;
-use zkwasm_rest_abi::{StorageData, MERKLE_MAP};
+use zkwasm_rest_abi::StorageData;
 use zkwasm_rest_convention::{IndexedObject, Position};
 
 #[derive(Clone, Serialize, Default, Copy)]

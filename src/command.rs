@@ -113,7 +113,6 @@ pub enum Activity {
 
 impl CommandHandler for Activity {
     fn handle(&self, pid: &[u64; 2], nonce: u64, rand: &[u64; 4], counter: u64) -> Result<(), u32> {
-        let counter = GlobalState::get_counter();
         let mut player = PuppyPlayer::get_from_pid(pid);
         match player.as_mut() {
             None => Err(ERROR_PLAYER_NOT_EXIST),

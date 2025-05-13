@@ -1,7 +1,5 @@
 use serde::Serialize;
 
-use crate::state::GLOBAL_STATE;
-
 const ACTIONS_SIZE: usize = 5;
 const NAME_SIZE: usize = 5;
 

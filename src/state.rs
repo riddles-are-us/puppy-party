@@ -7,6 +7,7 @@ use serde::Serialize;
 use std::cell::RefCell;
 use zkwasm_rest_abi::MERKLE_MAP;
 use zkwasm_rust_sdk::require;
+use zkwasm_rest_abi::enforce;
 use crate::command::Command;
 use crate::command::Activity;
 use crate::command::Deposit;
@@ -142,8 +143,9 @@ impl Transaction {
                 data: [params[2], params[3], params[4]]
             })
         } else if command == DEPOSIT {
+            enforce(params[3] == 0, "check deposit index"); // only token index 0 is supported
             Command::Deposit (Deposit {
-                data: [params[2], params[3], params[4]]
+                data: [params[1], params[2], params[4]]
             })
         } else if command == WITHDRAW_LOTTERY {
             Command::WithdrawLottery (WithdrawLottery {
@@ -165,7 +167,7 @@ impl Transaction {
             let chars = params[1..].iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
             Command::Activity (Activity::Comment(chars))
         } else {
-            unsafe {zkwasm_rust_sdk::require(command == TICK)};
+            unsafe {require(command == TICK)};
             Command::Tick
         };
         Transaction {
@@ -213,7 +215,7 @@ impl Transaction {
         let counter = GLOBAL_STATE.0.borrow_mut().counter;
         let e = match &self.command {
             Command::Tick => {
-                unsafe { require(*pkey == *ADMIN_PUBKEY) };
+                enforce(*pkey == *ADMIN_PUBKEY, "check admin key of tick");
                 self.tick();
                 0
             },
@@ -228,7 +230,7 @@ impl Transaction {
             Command::Activity(cmd) => cmd.handle(&pid, self.nonce, rand, counter)
                 .map_or_else(|e| e, |_| 0),
             Command::Deposit(cmd) => {
-                unsafe { require(*pkey == *ADMIN_PUBKEY) };
+                enforce(*pkey == *ADMIN_PUBKEY, "check admin key of deposit");
                 cmd.handle(&pid, self.nonce, rand, counter)
                     .map_or_else(|e| e, |_| 0)
             },
@@ -243,8 +245,6 @@ impl Transaction {
             }
         }
         let txsize = GLOBAL_STATE.0.borrow_mut().txsize;
-        unsafe {
-            clear_events(vec![e as u64, txsize])
-        }
+        clear_events(vec![e as u64, txsize])
     }
 }
