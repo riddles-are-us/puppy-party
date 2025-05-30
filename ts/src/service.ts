@@ -2,54 +2,45 @@ import { Service } from "zkwasm-ts-server";
 import {TxWitness} from "zkwasm-ts-server/src/prover";
 import {Event, EventModel} from "zkwasm-ts-server";
 import { Position, IndexedObjectModel, IndexedObject, PositionModel, parseMemeInfo} from "./info.js";
-import { Player} from "./api.js";
-import { get_server_admin_key } from "zkwasm-ts-server/src/config.js";
 import { Express } from "express";
 //import {clearTxFromCommit, CommitModel, getTxFromCommit, insertTxIntoCommit} from "./commits.js";
-import {merkleRootToBeHexString} from "zkwasm-ts-server/src/lib.js";
 import { SanityService } from "./sanity_service.js";
-
-const uncommittedTxs: TxWitness[] = [];
-
 
 const uploadDir = "./uploads";
 const sanityService = new SanityService(uploadDir);
 const service = new Service(eventCallback, batchedCallback, extra);
 await service.initialize();
 
-
-let currentUncommitMerkleRoot: string = merkleRootToBeHexString(service.merkleRoot);
-
 function extra (app: Express) {
-	app.get('/data/position/:pid1/:pid2', async(req:any, res) => {
-		let pid1:bigint = BigInt(req.params.pid1);
-		let pid2:bigint = BigInt(req.params.pid2);
-		console.log("query position:", pid1, pid2);
-		let doc = await PositionModel.find(
-				{pid_1: pid1, pid_2: pid2},
-		);
-		let data = doc.map((d) => {return Position.fromMongooseDoc(d).toJSON()})
-		console.log("query position:", doc);
-		
-		
+    app.get('/data/position/:pid1/:pid2', async(req:any, res) => {
+        let pid1:bigint = BigInt(req.params.pid1);
+        let pid2:bigint = BigInt(req.params.pid2);
+        console.log("query position:", pid1, pid2);
+        let doc = await PositionModel.find(
+            {pid_1: pid1, pid_2: pid2},
+        );
+        let data = doc.map((d) => {return Position.fromMongooseDoc(d).toJSON()})
+        console.log("query position:", doc);
 
-		res.status(200).send({
-			success: true,
-			data: data,
-		});
-	});
-	app.get('/data/memes', async(req:any, res) => {
-		const doc = await IndexedObjectModel.find();
-		const jdoc = doc.map((d) => {
-			const jdoc = IndexedObject.fromMongooseDoc(d);
-			return parseMemeInfo(jdoc);
-		});
-		res.status(200).send({
-			success: true,
-			data: jdoc,
-		});
-	});
-	sanityService.registerAPICallback(app);
+
+
+        res.status(201).send({
+            success: true,
+            data: data,
+        });
+    });
+    app.get('/data/memes', async(req:any, res) => {
+        const doc = await IndexedObjectModel.find();
+        const jdoc = doc.map((d) => {
+            const jdoc = IndexedObject.fromMongooseDoc(d);
+            return parseMemeInfo(jdoc);
+        });
+        res.status(201).send({
+            success: true,
+            data: jdoc,
+        });
+    });
+    sanityService.registerAPICallback(app);
 }
 
 
@@ -59,17 +50,6 @@ await sanityService.setMemeList();
 
 const EVENT_POSITION_UPDATE = 1;
 const EVENT_MEME_UPDATE = 2;
-
-let preemptcounter = 0;
-
-async function bootstrap(merkleRoot: string): Promise<TxWitness[]> {
-	/*
-	const txs = await getTxFromCommit(merkleRoot);
-	console.log("tsx in bootstrap:", txs);
-	return txs;
-	*/
-	return [];
-}
 
 async function batchedCallback(arg: TxWitness[], preMerkle: string, postMerkle: string) {
 	/*
@@ -147,6 +127,3 @@ async function eventCallback(arg: TxWitness, data: BigUint64Array) {
 		i += 1 + Number(eventLength);
 	}
 }
-
-
-
